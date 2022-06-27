@@ -2,27 +2,13 @@ package bee
 
 import (
 	"context"
-	"encoding/hex"
-	"errors"
 	"fmt"
-	"github.com/ethersphere/bee/pkg/cac"
-	"github.com/ethersphere/bee/pkg/feeds"
-	"github.com/ethersphere/bee/pkg/file/joiner"
-	"github.com/ethersphere/bee/pkg/file/loadsave"
-	"github.com/ethersphere/bee/pkg/file/pipeline"
-	"github.com/ethersphere/bee/pkg/file/pipeline/builder"
-	"github.com/ethersphere/bee/pkg/manifest"
-	"github.com/ethersphere/bee/pkg/resolver/multiresolver"
-	"github.com/ethersphere/bee/pkg/sctx"
-	"github.com/ethersphere/bee/pkg/soc"
-	"github.com/ethersphere/bee/pkg/topology"
 	"io"
 	"log"
 	"math/big"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sync"
 	"syscall"
 	"time"
 
@@ -30,8 +16,12 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethersphere/bee/pkg/accounting"
 	"github.com/ethersphere/bee/pkg/addressbook"
+	"github.com/ethersphere/bee/pkg/chainsync"
+	"github.com/ethersphere/bee/pkg/chainsyncer"
 	"github.com/ethersphere/bee/pkg/config"
 	"github.com/ethersphere/bee/pkg/crypto"
+	"github.com/ethersphere/bee/pkg/feeds"
+	"github.com/ethersphere/bee/pkg/feeds/factory"
 	"github.com/ethersphere/bee/pkg/hive"
 	filekeystore "github.com/ethersphere/bee/pkg/keystore/file"
 	"github.com/ethersphere/bee/pkg/localstore"
@@ -50,18 +40,22 @@ import (
 	"github.com/ethersphere/bee/pkg/pricer"
 	"github.com/ethersphere/bee/pkg/pricing"
 	"github.com/ethersphere/bee/pkg/pss"
+	"github.com/ethersphere/bee/pkg/puller"
 	"github.com/ethersphere/bee/pkg/pullsync"
 	"github.com/ethersphere/bee/pkg/pullsync/pullstorage"
 	"github.com/ethersphere/bee/pkg/pusher"
 	"github.com/ethersphere/bee/pkg/pushsync"
+	"github.com/ethersphere/bee/pkg/resolver/multiresolver"
 	"github.com/ethersphere/bee/pkg/retrieval"
 	"github.com/ethersphere/bee/pkg/settlement/pseudosettle"
 	"github.com/ethersphere/bee/pkg/settlement/swap/chequebook"
 	"github.com/ethersphere/bee/pkg/settlement/swap/erc20"
 	"github.com/ethersphere/bee/pkg/shed"
+	"github.com/ethersphere/bee/pkg/steward"
 	"github.com/ethersphere/bee/pkg/storage"
 	"github.com/ethersphere/bee/pkg/swarm"
 	"github.com/ethersphere/bee/pkg/tags"
+	"github.com/ethersphere/bee/pkg/topology"
 	"github.com/ethersphere/bee/pkg/topology/kademlia"
 	"github.com/ethersphere/bee/pkg/topology/lightnode"
 	"github.com/ethersphere/bee/pkg/transaction"
@@ -70,58 +64,9 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-type Event int
-
-const (
-	ContextCreated Event = iota
-	StateStore
-	BatchStoreCheck
-	AddressBook
-	InitChain
-	SyncChain
-	SwapEnable
-	Identity
-	LightNodes
-	SenderMatcher
-	Bootstrap
-	PaymentThresholdCalculation
-	BatchState
-	BeeLibp2p
-	BatchStore
-	LocalStore
-	PostageService
-	EventListener
-	BatchService
-	PostageContractService
-	NATManager
-	Hive
-	MetricsDB
-	KAD
-	BatchServiceStart
-	Accounting
-	Pseudosettle
-	InitSwap
-	MultipleServices
-	LiteNodeProtocols
-	MultiResolver
-	Ready
-
-	maxDelay                      = 1 * time.Minute
-	refreshRate                   = int64(4500000)
-	lightRefreshRate              = int64(450000)
-	basePrice                     = 10000
-	postageSyncingStallingTimeout = 10 * time.Minute
-	postageSyncingBackoffTimeout  = 5 * time.Second
-	minPaymentThreshold           = 2 * refreshRate
-	maxPaymentThreshold           = 24 * refreshRate
-	mainnetNetworkID              = uint64(1)
-
-	feedMetadataEntryOwner = "swarm-feed-owner"
-	feedMetadataEntryTopic = "swarm-feed-topic"
-	feedMetadataEntryType  = "swarm-feed-type"
-)
-
 type Options struct {
+	FullNodeMode               bool
+	Keystore                   string
 	DataDir                    string
 	Addr                       string
 	NATAddr                    string
@@ -158,17 +103,21 @@ type Options struct {
 	RetrievalCaching           bool
 }
 
-// TODO - Add option to start full node
-// TODO - satisfy blockstore Client (https://github.com/fairDataSociety/fairOS-dfs/blob/development/pkg/blockstore/client.go)
 // Bee client.
 type Bee struct {
-	cancel     context.CancelFunc
-	post       postage.Service
-	batch      string
-	logger     logging.Logger
-	tagService *tags.Tags
-	signer     crypto.Signer
-	ns         storage.Storer
+	ctx               context.Context
+	cancel            context.CancelFunc
+	post              postage.Service
+	logger            logging.Logger
+	tagService        *tags.Tags
+	signer            crypto.Signer
+	ns                storage.Storer
+	overlayEthAddress common.Address
+	topologyDriver    topology.Driver
+	chequebook        chequebook.Service
+	postageContract   postagecontract.Interface
+	steward           steward.Interface
+	feedFactory       feeds.Factory
 
 	p2pHalter       p2p.Halter
 	topologyHalter  topology.Halter
@@ -180,19 +129,17 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 	ch := make(chan Event)
 	errCh := make(chan error)
 	beeCh := make(chan *Bee)
-	wg := sync.WaitGroup{}
 	go func() {
-		wg.Add(1)
 		defer func() {
-			wg.Done()
-
 			close(ch)
 			close(errCh)
 			close(beeCh)
 		}()
-
+		if o.Keystore == "" {
+			o.Keystore = o.DataDir
+		}
 		logger := o.Logger
-		keystore := filekeystore.New(filepath.Join(o.DataDir, "keys"))
+		keystore := filekeystore.New(filepath.Join(o.Keystore, "keys"))
 		swarmPrivateKey, _, err := keystore.Key("swarm", password)
 		if err != nil {
 			logger.Error(fmt.Errorf("swarm key: %w", err))
@@ -206,7 +153,6 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			errCh <- fmt.Errorf("libp2p key: %w", err)
 			return
 		}
-
 		p2pCtx, p2pCancel := context.WithCancel(context.Background())
 		defer func() {
 			// if there's been an error on this function
@@ -220,6 +166,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 
 		b := &Bee{
 			logger: o.Logger,
+			ctx:    p2pCtx,
 			cancel: p2pCancel,
 			signer: signer,
 		}
@@ -259,7 +206,6 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 		)
 
 		chainEnabled := isChainEnabled(o)
-		pollingInterval = time.Duration(o.BlockTime) * time.Second
 		chainBackend, overlayEthAddress, chainID, transactionMonitor, transactionService, err = node.InitChain(
 			p2pCtx,
 			logger,
@@ -274,6 +220,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			errCh <- fmt.Errorf("init chain: %w", err)
 			return
 		}
+		b.overlayEthAddress = overlayEthAddress
 		b.ethClientCloser = chainBackend.Close
 
 		logger.Info("overlay address : ", overlayEthAddress)
@@ -329,9 +276,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 				errCh <- fmt.Errorf("factory fail: %w", err)
 				return
 			}
-
 			erc20Service = erc20.New(transactionService, erc20Address)
-
 			if o.ChequebookEnable && chainEnabled {
 				chequebookService, err = node.InitChequebookService(
 					p2pCtx,
@@ -352,6 +297,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 					errCh <- fmt.Errorf("init chequebook service failed: %w", err)
 					return
 				}
+				b.chequebook = chequebookService
 			}
 
 			chequeStore, cashoutService = initChequeStoreCashout(
@@ -501,6 +447,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			WelcomeMessage:  o.WelcomeMessage,
 			Transaction:     txHash,
 			ValidateOverlay: chainEnabled,
+			FullNode:        o.FullNodeMode,
 		})
 
 		if err != nil {
@@ -616,7 +563,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			batchStore,
 			chainEnabled,
 		)
-		_ = postageContractService
+		b.postageContract = postageContractService
 		ch <- PostageContractService
 
 		if natManager := p2ps.NATManager(); natManager != nil {
@@ -673,6 +620,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			return
 		}
 		b.topologyHalter = kad
+		b.topologyDriver = kad
 		b.closers = append(b.closers, kad)
 
 		hive.SetAddPeersHandler(kad.AddPeers)
@@ -745,7 +693,12 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 		b.closers = append(b.closers, acc)
 		ch <- Accounting
 
-		enforcedRefreshRate := big.NewInt(lightRefreshRate)
+		var enforcedRefreshRate *big.Int
+		if o.FullNodeMode {
+			enforcedRefreshRate = big.NewInt(refreshRate)
+		} else {
+			enforcedRefreshRate = big.NewInt(lightRefreshRate)
+		}
 		pseudosettleService := pseudosettle.New(p2ps, logger, stateStore, acc, enforcedRefreshRate, big.NewInt(lightRefreshRate), p2ps)
 		if err = p2ps.AddProtocol(pseudosettleService.Protocol()); err != nil {
 			logger.Error(fmt.Errorf("pseudosettle service: %w", err))
@@ -805,7 +758,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 
 		pinningService := pinning.NewService(storer, stateStore, traversalService)
 		_ = pinningService
-		pushSyncProtocol := pushsync.New(swarmAddress, blockHash, p2ps, storer, kad, b.tagService, false, pssService.TryUnwrap, validStamp, logger, acc, pricer, signer, nil, o.WarmupTime)
+		pushSyncProtocol := pushsync.New(swarmAddress, blockHash, p2ps, storer, kad, b.tagService, o.FullNodeMode, pssService.TryUnwrap, validStamp, logger, acc, pricer, signer, nil, o.WarmupTime)
 
 		// set the pushSyncer in the PSS
 		pssService.SetPushSyncer(pushSyncProtocol)
@@ -817,17 +770,25 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 
 		pullSyncProtocol := pullsync.New(p2ps, pullStorage, pssService.TryUnwrap, validStamp, logger)
 		b.closers = append(b.closers, pullSyncProtocol)
-
+		var pullerService *puller.Puller
+		if o.FullNodeMode {
+			pullerService = puller.New(stateStore, kad, pullSyncProtocol, logger, puller.Options{}, o.WarmupTime)
+			b.closers = append(b.closers, pullerService)
+		}
 		ch <- MultipleServices
 
 		retrieveProtocolSpec := retrieve.Protocol()
 		pushSyncProtocolSpec := pushSyncProtocol.Protocol()
 		pullSyncProtocolSpec := pullSyncProtocol.Protocol()
 
-		logger.Info("starting in light mode")
-		p2p.WithBlocklistStreams(p2p.DefaultBlocklistTime, retrieveProtocolSpec)
-		p2p.WithBlocklistStreams(p2p.DefaultBlocklistTime, pushSyncProtocolSpec)
-		p2p.WithBlocklistStreams(p2p.DefaultBlocklistTime, pullSyncProtocolSpec)
+		if o.FullNodeMode {
+			logger.Info("starting in full mode")
+		} else {
+			logger.Info("starting in light mode")
+			p2p.WithBlocklistStreams(p2p.DefaultBlocklistTime, retrieveProtocolSpec)
+			p2p.WithBlocklistStreams(p2p.DefaultBlocklistTime, pushSyncProtocolSpec)
+			p2p.WithBlocklistStreams(p2p.DefaultBlocklistTime, pullSyncProtocolSpec)
+		}
 
 		if err = p2ps.AddProtocol(retrieveProtocolSpec); err != nil {
 			logger.Error(fmt.Errorf("retrieval service: %w", err))
@@ -849,6 +810,32 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 		)
 		b.closers = append(b.closers, multiResolver)
 		ch <- LiteNodeProtocols
+		var chainSyncer *chainsyncer.ChainSyncer
+
+		if o.FullNodeMode {
+			cs, err := chainsync.New(p2ps, chainBackend)
+			if err != nil {
+				logger.Error(fmt.Errorf("new chainsync: %w", err))
+				errCh <- fmt.Errorf("new chainsync: %w", err)
+				return
+			}
+			if err = p2ps.AddProtocol(cs.Protocol()); err != nil {
+				logger.Error(fmt.Errorf("chainsync protocol: %w", err))
+				errCh <- fmt.Errorf("chainsync protocol: %w", err)
+				return
+			}
+			chainSyncer, err = chainsyncer.New(chainBackend, cs, kad, p2ps, logger, nil)
+			if err != nil {
+				logger.Error(fmt.Errorf("new chainsyncer: %w", err))
+				errCh <- fmt.Errorf(": %w", err)
+				return
+			}
+
+			b.closers = append(b.closers, chainSyncer)
+		}
+
+		b.feedFactory = factory.New(b.ns)
+		b.steward = steward.New(storer, traversalService, retrieve, pushSyncProtocol)
 
 		if err := kad.Start(p2pCtx); err != nil {
 			logger.Error(err)
@@ -864,7 +851,6 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 		ch <- Ready
 		beeCh <- b
 	}()
-	wg.Wait()
 	return ch, beeCh, errCh
 }
 
@@ -891,211 +877,35 @@ func (b *Bee) Shutdown() error {
 	return nil
 }
 
-func (b *Bee) UseBatch(batch string) {
-	b.batch = batch
+func (b *Bee) Addr() common.Address {
+	return b.overlayEthAddress
 }
 
-func (b *Bee) GetCurrentBatch() string {
-	return b.batch
+func (b *Bee) ChequebookAddr() common.Address {
+	if b.chequebook != nil {
+		return b.chequebook.Address()
+	}
+	return common.HexToAddress(swarm.ZeroAddress.String())
 }
 
-func (b *Bee) GetBatches() []*postage.StampIssuer {
-	return b.post.StampIssuers()
+func (b *Bee) ChequebookBalance() (*big.Int, error) {
+	if b.chequebook != nil {
+		return b.chequebook.Balance(b.ctx)
+	}
+	return nil, fmt.Errorf("chequebook not initialised")
 }
 
-func (b *Bee) AddBytes(parentContext context.Context, reader io.Reader) (reference swarm.Address, err error) {
-	if b.batch == "" {
-		err = fmt.Errorf("batch is not set")
-		return
+func (b *Bee) ChequebookWithdraw(amount *big.Int) (common.Hash, error) {
+	if b.chequebook != nil {
+		return b.chequebook.Withdraw(b.ctx, amount)
 	}
-	batch, err := hex.DecodeString(b.batch)
-	if err != nil {
-		err = fmt.Errorf("invalid postage batch")
-		return
-	}
-	i, err := b.post.GetStampIssuer(batch)
-	if err != nil {
-		err = fmt.Errorf("stamp issuer: %w", err)
-		return
-	}
-	tag, err := b.tagService.Create(0)
-	stamper := postage.NewStamper(i, b.signer)
-	putter := &stamperPutter{Storer: b.ns, stamper: stamper}
-	ctx := sctx.SetTag(parentContext, tag)
-	pipe := builder.NewPipelineBuilder(ctx, putter, storage.ModePutUpload, false)
-	reference, err = builder.FeedPipeline(ctx, pipe, reader)
-	if err != nil {
-		err = fmt.Errorf("upload failed: %w", err)
-		return
-	}
-	return
+	return common.HexToHash(""), fmt.Errorf("chequebook not initialised")
 }
 
-func (b *Bee) GetBytes(reference swarm.Address) (io.Reader, error) {
-	reader, _, err := joiner.New(context.Background(), b.ns, reference)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return nil, fmt.Errorf("api download: not found : %s", err.Error())
-		}
-		return nil, fmt.Errorf("unexpected error: %s: %v", reference, err)
-	}
-	return reader, nil
+func (b *Bee) Signer() crypto.Signer {
+	return b.signer
 }
 
-func (b *Bee) AddSOC(ctx context.Context, owner, id, sigStr string, reader io.Reader) (reference swarm.Address, err error) {
-	ownerB, err := hex.DecodeString(owner)
-	if err != nil {
-		b.logger.Debugf("soc upload: bad owner: %v", err)
-		return
-	}
-	idB, err := hex.DecodeString(id)
-	if err != nil {
-		b.logger.Debugf("soc upload: bad id: %v", err)
-		return
-	}
-
-	if sigStr == "" {
-		b.logger.Debugf("soc upload: empty signature")
-		return
-	}
-
-	sigB, err := hex.DecodeString(sigStr)
-	if err != nil {
-		b.logger.Debugf("soc upload: bad signature: %v", err)
-		return
-	}
-
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		b.logger.Debugf("soc upload: read chunk data error: %v", err)
-		return
-	}
-
-	if len(data) < swarm.SpanSize {
-		b.logger.Debugf("soc upload: chunk data too short")
-		return
-	}
-
-	if len(data) > swarm.ChunkSize+swarm.SpanSize {
-		b.logger.Debugf("soc upload: chunk data exceeds %d bytes", swarm.ChunkSize+swarm.SpanSize)
-		return
-	}
-
-	ch, err := cac.NewWithDataSpan(data)
-	if err != nil {
-		b.logger.Debugf("soc upload: create content addressed chunk: %v", err)
-		return
-	}
-
-	ss, err := soc.NewSigned(idB, ch, ownerB, sigB)
-	if err != nil {
-		b.logger.Debugf("soc upload: address soc error: %v", err)
-		return
-	}
-
-	sch, err := ss.Chunk()
-	if err != nil {
-		b.logger.Debugf("soc upload: read chunk data error: %v", err)
-		return
-	}
-
-	if !soc.Valid(sch) {
-		b.logger.Debugf("soc upload: invalid chunk: %v", err)
-		return
-	}
-
-	has, err := b.ns.Has(ctx, sch.Address())
-	if err != nil {
-		b.logger.Debugf("soc upload: store has: %v", err)
-		return
-	}
-	if has {
-		b.logger.Error("soc upload: chunk already exists")
-		return
-	}
-	batch, err := hex.DecodeString(b.batch)
-	if err != nil {
-		err = fmt.Errorf("invalid postage batch")
-		return
-	}
-	i, err := b.post.GetStampIssuer(batch)
-	if err != nil {
-		b.logger.Debugf("soc upload: postage batch issuer: %v", err)
-		return
-	}
-
-	stamper := postage.NewStamper(i, b.signer)
-	stamp, err := stamper.Stamp(sch.Address())
-	if err != nil {
-		b.logger.Debugf("soc upload: stamp: %v", err)
-		return
-	}
-	sch = sch.WithStamp(stamp)
-	_, err = b.ns.Put(ctx, storage.ModePutUpload, sch)
-	if err != nil {
-		b.logger.Debugf("soc upload: chunk write error: %v", err)
-		return
-	}
-	reference = sch.Address()
-	return
-}
-
-func (b *Bee) AddFeed(ctx context.Context, owner, topic string) (reference swarm.Address, err error) {
-	ownerB, err := hex.DecodeString(owner)
-	if err != nil {
-		b.logger.Debugf("feed put: decode owner: %v", err)
-		return
-	}
-	topicB, err := hex.DecodeString(topic)
-	if err != nil {
-		b.logger.Debugf("feed put: decode topic: %v", err)
-		return
-	}
-	if b.batch == "" {
-		err = fmt.Errorf("batch is not set")
-		return
-	}
-	batch, err := hex.DecodeString(b.batch)
-	if err != nil {
-		err = fmt.Errorf("invalid postage batch")
-		return
-	}
-	i, err := b.post.GetStampIssuer(batch)
-	if err != nil {
-		err = fmt.Errorf("stamp issuer: %w", err)
-		return
-	}
-	stamper := postage.NewStamper(i, b.signer)
-	putter := &stamperPutter{Storer: b.ns, stamper: stamper}
-
-	pipeFn := func() pipeline.Interface {
-		return builder.NewPipelineBuilder(ctx, putter, storage.ModePutUpload, false)
-	}
-	l := loadsave.New(putter, pipeFn)
-	feedManifest, err := manifest.NewDefaultManifest(l, false)
-	if err != nil {
-		b.logger.Debugf("feed put: new manifest: %v", err)
-		return
-	}
-
-	meta := map[string]string{
-		feedMetadataEntryOwner: hex.EncodeToString(ownerB),
-		feedMetadataEntryTopic: hex.EncodeToString(topicB),
-		feedMetadataEntryType:  feeds.Sequence.String(), // only sequence allowed for now
-	}
-
-	emptyAddr := make([]byte, 32)
-
-	// a feed manifest stores the metadata at the root "/" path
-	err = feedManifest.Add(ctx, "/", manifest.NewEntry(swarm.NewAddress(emptyAddr), meta))
-	if err != nil {
-		b.logger.Debugf("feed post: add manifest entry: %v", err)
-		return
-	}
-	reference, err = feedManifest.Store(ctx)
-	if err != nil {
-		b.logger.Debugf("feed post: store manifest: %v", err)
-		return
-	}
-	return
+func (b *Bee) Topology() *topology.KadParams {
+	return b.topologyDriver.Snapshot()
 }

@@ -43,6 +43,57 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+type Event int
+
+const (
+	ContextCreated Event = iota
+	StateStore
+	BatchStoreCheck
+	AddressBook
+	InitChain
+	SyncChain
+	SwapEnable
+	Identity
+	LightNodes
+	SenderMatcher
+	Bootstrap
+	PaymentThresholdCalculation
+	BatchState
+	BeeLibp2p
+	BatchStore
+	LocalStore
+	PostageService
+	EventListener
+	BatchService
+	PostageContractService
+	NATManager
+	Hive
+	MetricsDB
+	KAD
+	BatchServiceStart
+	Accounting
+	Pseudosettle
+	InitSwap
+	MultipleServices
+	LiteNodeProtocols
+	MultiResolver
+	Ready
+
+	maxDelay                      = 1 * time.Minute
+	refreshRate                   = int64(4500000)
+	lightRefreshRate              = int64(450000)
+	basePrice                     = 10000
+	postageSyncingStallingTimeout = 10 * time.Minute
+	postageSyncingBackoffTimeout  = 5 * time.Second
+	minPaymentThreshold           = 2 * refreshRate
+	maxPaymentThreshold           = 24 * refreshRate
+	mainnetNetworkID              = uint64(1)
+
+	feedMetadataEntryOwner = "swarm-feed-owner"
+	feedMetadataEntryTopic = "swarm-feed-topic"
+	feedMetadataEntryType  = "swarm-feed-type"
+)
+
 func batchStoreExists(s storage.StateStorer) (bool, error) {
 
 	hasOne := false
@@ -117,7 +168,8 @@ func bootstrapNode(
 	o *Options,
 ) (snapshot *postage.ChainSnapshot, retErr error) {
 
-	p2pCtx, _ := context.WithCancel(context.Background())
+	p2pCtx, p2pCancel := context.WithCancel(context.Background())
+	defer p2pCancel()
 
 	p2ps, err := libp2p.New(p2pCtx, signer, networkID, swarmAddress, addr, addressbook, stateStore, lightNodes, senderMatcher, o.Logger, nil, libp2p.Options{
 		PrivateKey:     libp2pPrivateKey,
