@@ -72,11 +72,10 @@ const (
 	KAD
 	BatchServiceStart
 	Accounting
-	Pseudosettle
+	PseudoSettle
 	InitSwap
 	MultipleServices
 	LiteNodeProtocols
-	MultiResolver
 	Ready
 
 	maxDelay                      = 1 * time.Minute

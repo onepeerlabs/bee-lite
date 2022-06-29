@@ -706,7 +706,7 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			return
 		}
 		acc.SetRefreshFunc(pseudosettleService.Pay)
-		ch <- Pseudosettle
+		ch <- PseudoSettle
 
 		if o.SwapEnable && chainEnabled {
 			swapService, priceOracle, err := node.InitSwap(
