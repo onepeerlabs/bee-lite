@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	"github.com/ethersphere/bee/pkg/file/joiner"
 	"github.com/ethersphere/bee/pkg/file/loadsave"
 	"github.com/ethersphere/bee/pkg/hive"
+	filekeystore "github.com/ethersphere/bee/pkg/keystore/file"
+	"github.com/ethersphere/bee/pkg/logging"
 	"github.com/ethersphere/bee/pkg/manifest"
 	"github.com/ethersphere/bee/pkg/netstore"
 	"github.com/ethersphere/bee/pkg/p2p"
@@ -30,8 +33,10 @@ import (
 	"github.com/ethersphere/bee/pkg/pricer"
 	"github.com/ethersphere/bee/pkg/pricing"
 	"github.com/ethersphere/bee/pkg/retrieval"
+	"github.com/ethersphere/bee/pkg/sctx"
 	"github.com/ethersphere/bee/pkg/settlement/pseudosettle"
 	"github.com/ethersphere/bee/pkg/settlement/swap/chequebook"
+	"github.com/ethersphere/bee/pkg/settlement/swap/erc20"
 	"github.com/ethersphere/bee/pkg/shed"
 	"github.com/ethersphere/bee/pkg/storage"
 	"github.com/ethersphere/bee/pkg/storage/inmemstore"
@@ -91,6 +96,10 @@ const (
 	feedMetadataEntryOwner = "swarm-feed-owner"
 	feedMetadataEntryTopic = "swarm-feed-topic"
 	feedMetadataEntryType  = "swarm-feed-type"
+
+	balanceCheckBackoffDuration = 20 * time.Second
+	erc20SmallUnitStr = "10000000000000000"
+	ethSmallUnitStr   = "1000000000000000000"
 )
 
 func batchStoreExists(s storage.StateStorer) (bool, error) {
@@ -469,4 +478,77 @@ func containsChunk(addr swarm.Address, chs ...swarm.Chunk) bool {
 		}
 	}
 	return false
+}
+
+
+func checkBalance(
+	ctx context.Context,
+	logger logging.Logger,
+	swapInitialDeposit *big.Int,
+	swapBackend transaction.Backend,
+	overlayEthAddress common.Address,
+	erc20Token erc20.Service,
+) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, balanceCheckBackoffDuration)
+	defer cancel()
+
+	erc20Balance, err := erc20Token.BalanceOf(timeoutCtx, overlayEthAddress)
+	if err != nil {
+		return err
+	}
+
+	ethBalance, err := swapBackend.BalanceAt(timeoutCtx, overlayEthAddress, nil)
+	if err != nil {
+		return err
+	}
+
+	gasPrice := sctx.GetGasPrice(ctx)
+
+	if gasPrice == nil {
+		gasPrice, err = swapBackend.SuggestGasPrice(timeoutCtx)
+		if err != nil {
+			return err
+		}
+	}
+
+	minimumEth := gasPrice.Mul(gasPrice, big.NewInt(250000))
+
+	insufficientERC20 := erc20Balance.Cmp(swapInitialDeposit) < 0
+	insufficientETH := ethBalance.Cmp(minimumEth) < 0
+
+	erc20SmallUnit, ethSmallUnit := new(big.Int), new(big.Float)
+	erc20SmallUnit.SetString(erc20SmallUnitStr, 10)
+	ethSmallUnit.SetString(ethSmallUnitStr)
+
+	if insufficientERC20 || insufficientETH {
+		neededERC20, mod := new(big.Int).DivMod(swapInitialDeposit, erc20SmallUnit, new(big.Int))
+		if mod.Cmp(big.NewInt(0)) > 0 {
+			// always round up the division as the bzzaar cannot handle decimals
+			neededERC20.Add(neededERC20, big.NewInt(1))
+		}
+
+		neededETH := new(big.Float).Quo(new(big.Float).SetInt(minimumEth), ethSmallUnit)
+
+		if insufficientETH && insufficientERC20 {
+			logger.Warningf("cannot continue until there is at least %f xDAI (for Gas) and at least %d BZZ bridged on the xDAI network available on %x", neededETH, neededERC20, overlayEthAddress)
+			return fmt.Errorf("cannot continue until there is at least %f xDAI (for Gas) and at least %d BZZ bridged on the xDAI network available on %x", neededETH, neededERC20, overlayEthAddress)
+		} else if insufficientETH {
+			logger.Warningf("cannot continue until there is at least %f xDAI (for Gas) available on %x", neededETH, overlayEthAddress)
+			return fmt.Errorf("cannot continue until there is at least %f xDAI (for Gas) available on %x", neededETH, overlayEthAddress)
+		} else {
+			logger.Warningf("cannot continue until there is at least %d BZZ available on %x", neededERC20, overlayEthAddress)
+			return fmt.Errorf("cannot continue until there is at least %d BZZ available on %x", neededERC20, overlayEthAddress)
+		}
+	}
+	return nil
+}
+
+func OverlayAddr(root, password string) (common.Address, error){
+	keystore := filekeystore.New(filepath.Join(root, "keys"))
+	swarmPrivateKey, _, err := keystore.Key("swarm", password)
+	if err != nil {
+		return common.Address{}, err
+	}
+	signer := crypto.NewDefaultSigner(swarmPrivateKey)
+	return signer.EthereumAddress()
 }
