@@ -278,6 +278,18 @@ func Start(o *Options, password string) (chan Event, chan *Bee, chan error) {
 			}
 			erc20Service = erc20.New(transactionService, erc20Address)
 			if o.ChequebookEnable && chainEnabled {
+				//deposit, ok := new(big.Int).SetString(o.SwapInitialDeposit, 10)
+				//if !ok {
+				//	logger.Error(fmt.Errorf("initial swap deposit \"%s\" cannot be parsed", o.SwapInitialDeposit))
+				//	errCh <- fmt.Errorf("initial swap deposit \"%s\" cannot be parsed", o.SwapInitialDeposit)
+				//	return
+				//}
+				//err = checkBalance(p2pCtx, logger, deposit, chainBackend, overlayEthAddress, erc20Service)
+				//if err != nil {
+				//	logger.Error(fmt.Errorf("check balance: %w", err))
+				//	errCh <- fmt.Errorf("check balance: %w", err)
+				//	return
+				//}
 				chequebookService, err = node.InitChequebookService(
 					p2pCtx,
 					logger,

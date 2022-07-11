@@ -158,7 +158,6 @@ FETCH:
 			if ok {
 				fname = filepath.Base(fname) // only keep the file name
 			}
-
 			reader, _, err := joiner.New(parentContext, b.ns, indexDocumentManifestEntry.Reference())
 			if err != nil {
 				if errors.Is(err, storage.ErrNotFound) {
