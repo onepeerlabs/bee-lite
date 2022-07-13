@@ -48,41 +48,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-type Event int
-
 const (
-	ContextCreated Event = iota
-	StateStore
-	BatchStoreCheck
-	AddressBook
-	InitChain
-	SyncChain
-	SwapEnable
-	Identity
-	LightNodes
-	SenderMatcher
-	Bootstrap
-	PaymentThresholdCalculation
-	BatchState
-	BeeLibp2p
-	BatchStore
-	LocalStore
-	PostageService
-	EventListener
-	BatchService
-	PostageContractService
-	NATManager
-	Hive
-	MetricsDB
-	KAD
-	BatchServiceStart
-	Accounting
-	PseudoSettle
-	InitSwap
-	MultipleServices
-	LiteNodeProtocols
-	Ready
-
 	maxDelay                      = 1 * time.Minute
 	refreshRate                   = int64(4500000)
 	lightRefreshRate              = int64(450000)
@@ -98,8 +64,8 @@ const (
 	feedMetadataEntryType  = "swarm-feed-type"
 
 	balanceCheckBackoffDuration = 20 * time.Second
-	erc20SmallUnitStr = "10000000000000000"
-	ethSmallUnitStr   = "1000000000000000000"
+	erc20SmallUnitStr           = "10000000000000000"
+	ethSmallUnitStr             = "1000000000000000000"
 )
 
 func batchStoreExists(s storage.StateStorer) (bool, error) {
@@ -480,7 +446,6 @@ func containsChunk(addr swarm.Address, chs ...swarm.Chunk) bool {
 	return false
 }
 
-
 func checkBalance(
 	ctx context.Context,
 	logger logging.Logger,
@@ -543,7 +508,7 @@ func checkBalance(
 	return nil
 }
 
-func OverlayAddr(root, password string) (common.Address, error){
+func OverlayAddr(root, password string) (common.Address, error) {
 	keystore := filekeystore.New(filepath.Join(root, "keys"))
 	swarmPrivateKey, _, err := keystore.Key("swarm", password)
 	if err != nil {
