@@ -3,49 +3,6 @@
 
 bee-lite is an embeddable, lightweight bee node for application to use swarm directly
 
-
-### What are events in bee-lite?
-While starting the bee node we perform multiple tasks. On each completed task we emit an event so
-that we can keep track of how much progress we have made during startup.
-
-### Events
-We have the following events
-```
-const (
-    ContextCreated Event = iota
-    StateStore
-    BatchStoreCheck
-    AddressBook
-    InitChain
-    SyncChain
-    SwapEnable
-    Identity
-    LightNodes
-    SenderMatcher
-    Bootstrap
-    PaymentThresholdCalculation
-    BatchState
-    BeeLibp2p
-    BatchStore
-    LocalStore
-    PostageService
-    EventListener
-    BatchService
-    PostageContractService
-    NATManager
-    Hive
-    MetricsDB
-    KAD
-    BatchServiceStart
-    Accounting
-    PseudoSettle
-    InitSwap
-    MultipleServices
-    LiteNodeProtocols
-    Ready
-)
-```
-
 ## How to run
 ```
 o := &bee.Options{
@@ -74,24 +31,8 @@ o := &bee.Options{
     DBBlockCacheCapacity:     32 * 1024 * 1024,
     RetrievalCaching:         true,
 }
-
-// start returns three channels
-// first one is for events. Events channel will emit "Ready" once the node has started.
-// After we get the Ready event, we can read the bee instance itself from the second channel.
-// Third channel is for errors. During the startup if we encounter any error that will be send
-// via this third channel.
-ch, beeCh, errCh := bee.Start(o, password)
-ready:
-    for {
-        select {
-        case evt := <-ch:
-            if evt == bee.Ready {
-                fmt.Println("node ready")
-                i.b = <-beeCh
-                break ready
-            }
-        case err := <-errCh:
-            return error
-        }
-    }
+b, err := bee.Start(o, password)
+if err != nil {
+    return err
+}
 ```
