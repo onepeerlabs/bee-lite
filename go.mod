@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/ethereum/go-ethereum v1.10.18
-	github.com/ethersphere/bee v1.6.1
+	github.com/ethersphere/bee v1.7.0
 	github.com/multiformats/go-multiaddr v0.5.0
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
 )
@@ -12,7 +12,7 @@ require (
 require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/btcsuite/btcd v0.22.0-beta // indirect
+	github.com/btcsuite/btcd v0.22.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/casbin/casbin/v2 v2.35.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect

@@ -4,41 +4,19 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/ethersphere/bee/pkg/cac"
+
 	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/soc"
 	"github.com/ethersphere/bee/pkg/storage"
 	"github.com/ethersphere/bee/pkg/swarm"
 )
 
 const (
-	TopicLength    = 32
-	MaxChunkLength = 4096
+	TopicLength = 32
 )
 
 type Topic [TopicLength]byte
 
-func (b *Bee) AddSOC(ctx context.Context, batchHex string, id, data []byte) (reference swarm.Address, err error) {
-
-	if len(id) != TopicLength {
-		err = fmt.Errorf("invalid topic length")
-		return
-	}
-	if len(data) > MaxChunkLength {
-		err = fmt.Errorf("payload size is too large. maximum payload size is %d bytes", MaxChunkLength)
-		return
-	}
-
-	ch, err := cac.New(data)
-	if err != nil {
-		return
-	}
-	s := soc.New(id, ch)
-	sch, err := s.Sign(b.signer)
-	if err != nil {
-		return
-	}
-
+func (b *Bee) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) (reference swarm.Address, err error) {
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -54,17 +32,17 @@ func (b *Bee) AddSOC(ctx context.Context, batchHex string, id, data []byte) (ref
 		return
 	}
 	stamper := postage.NewStamper(i, b.signer)
-	stamp, err := stamper.Stamp(sch.Address())
+	stamp, err := stamper.Stamp(ch.Address())
 	if err != nil {
 		b.logger.Debugf("soc upload: stamp: %v", err)
 		return
 	}
-	sch = sch.WithStamp(stamp)
-	_, err = b.ns.Put(ctx, storage.ModePutUpload, sch)
+	ch = ch.WithStamp(stamp)
+	_, err = b.ns.Put(ctx, storage.ModePutUpload, ch)
 	if err != nil {
 		return swarm.ZeroAddress, err
 	}
 
-	reference = sch.Address()
+	reference = ch.Address()
 	return
 }

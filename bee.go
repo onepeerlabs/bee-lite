@@ -123,6 +123,7 @@ type Bee struct {
 	topologyHalter  topology.Halter
 	ethClientCloser func()
 	closers         []io.Closer
+	syncingStopped  chan struct{}
 }
 
 func Start(o *Options, password string) (*Bee, error) {
@@ -132,7 +133,10 @@ func Start(o *Options, password string) (*Bee, error) {
 	)
 	defer func() {
 		if errMain != nil && b != nil {
-			b.Shutdown()
+			err := b.Shutdown()
+			if err != nil {
+				o.Logger.Error("shutdown failed")
+			}
 		}
 	}()
 	if o.Keystore == "" {
@@ -156,10 +160,11 @@ func Start(o *Options, password string) (*Bee, error) {
 	p2pCtx, p2pCancel := context.WithCancel(context.Background())
 
 	b = &Bee{
-		logger: o.Logger,
-		ctx:    p2pCtx,
-		cancel: p2pCancel,
-		signer: signer,
+		logger:         o.Logger,
+		ctx:            p2pCtx,
+		cancel:         p2pCancel,
+		signer:         signer,
+		syncingStopped: make(chan struct{}),
 	}
 
 	stateStore, err := node.InitStateStore(logger, o.DataDir)
@@ -340,6 +345,10 @@ func Start(o *Options, password string) (*Bee, error) {
 	}
 
 	swarmAddress, err := crypto.NewOverlayAddress(*pubKey, o.NetworkID, blockHash)
+	if err != nil {
+		return nil, fmt.Errorf("compute overlay address: %w", err)
+	}
+	logger.Infof("using overlay address %s", swarmAddress)
 
 	err = node.CheckOverlayWithStore(swarmAddress, stateStore)
 	if err != nil {
@@ -347,7 +356,6 @@ func Start(o *Options, password string) (*Bee, error) {
 		logger.Error(fmt.Errorf("check overlay: %w", err))
 		return nil, fmt.Errorf("check overlay: %w", err)
 	}
-	logger.Infof("using overlay address %s", swarmAddress)
 
 	lightNodes := lightnode.NewContainer(swarmAddress)
 
@@ -519,7 +527,7 @@ func Start(o *Options, password string) (*Bee, error) {
 		postageSyncStart = startBlock
 	}
 
-	eventListener = listener.New(logger, chainBackend, postageContractAddress, o.BlockTime, nil, postageSyncingStallingTimeout, postageSyncingBackoffTimeout)
+	eventListener = listener.New(b.syncingStopped, logger, chainBackend, postageContractAddress, o.BlockTime, postageSyncingStallingTimeout, postageSyncingBackoffTimeout)
 	b.closers = append(b.closers, eventListener)
 
 	batchSvc, err = batchservice.New(stateStore, batchStore, logger, eventListener, overlayEthAddress.Bytes(), b.post, sha3.New256, o.Resync)
@@ -864,4 +872,8 @@ func (b *Bee) Signer() crypto.Signer {
 
 func (b *Bee) Topology() *topology.KadParams {
 	return b.topologyDriver.Snapshot()
+}
+
+func (b *Bee) SyncingStopped() chan struct{} {
+	return b.syncingStopped
 }

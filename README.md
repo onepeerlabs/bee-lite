@@ -1,7 +1,7 @@
 # bee-lite
 [![Go Reference](https://pkg.go.dev/badge/github.com/onepeerlabs/bee-lite.svg)](https://pkg.go.dev/github.com/onepeerlabs/bee-lite)
 
-bee-lite is an embeddable, lightweight bee node for application to use swarm directly
+bee-lite is an embeddable, lightweight bee node for applications to use swarm directly
 
 ## How to run
 ```
@@ -11,7 +11,7 @@ o := &bee.Options{
     DataDir:                  dataDir,
     Addr:                     ":1836",
     WelcomeMessage:           "welcome from bee-lite",
-    Bootnodes:                []string{"/dnsaddr/mainnet.ethswarm.org"},
+    Bootnodes:                []string{"/dnsaddr/testnet.ethswarm.org"},
     Logger:                   logging.New(os.Stdout, logrus.ErrorLevel),
     SwapEndpoint:             <SWAP_ENDPOINT>,
     SwapInitialDeposit:       "10000000000000000",
