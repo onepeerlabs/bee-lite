@@ -1,4 +1,4 @@
-package bee
+package beelite
 
 import (
 	"context"
@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	LoggerName                     = "swarmmobile"
-	BeeVersion                     = "v1.18.2"
+	LoggerName                     = "beelite"
 	defaultBlockCacheCapacity      = uint64(32 * 1024 * 1024)
 	defaultWriteBufferSize         = uint64(32 * 1024 * 1024)
 	feedMetadataEntryOwner         = "swarm-feed-owner"
@@ -80,7 +79,6 @@ type putterSessionWrapper struct {
 // noOpChequebookService is a noOp implementation for chequebook.Service interface.
 type noOpChequebookService struct{}
 
-// from node/chain.go
 func (m *noOpChequebookService) Deposit(context.Context, *big.Int) (hash common.Hash, err error) {
 	return hash, postagecontract.ErrChainDisabled
 }
@@ -107,6 +105,39 @@ func (m *noOpChequebookService) LastCheque(common.Address) (*chequebook.SignedCh
 }
 func (m *noOpChequebookService) LastCheques() (map[common.Address]*chequebook.SignedCheque, error) {
 	return nil, postagecontract.ErrChainDisabled
+}
+
+func newLogger(loggerName string, verbosity string) (beelog.Logger, error) {
+	var (
+		vLevel beelog.Level
+	)
+
+	switch verbosity {
+	case "0", "silent":
+		vLevel = beelog.VerbosityInfo
+	case "1", "error":
+		vLevel = beelog.VerbosityError
+	case "2", "warn":
+		vLevel = beelog.VerbosityWarning
+	case "3", "info":
+		vLevel = beelog.VerbosityInfo
+	case "4", "debug":
+		vLevel = beelog.VerbosityDebug
+	case "5", "trace":
+		vLevel = beelog.VerbosityDebug + 1
+	default:
+		return nil, fmt.Errorf("unknown verbosity level %q", verbosity)
+	}
+
+	beelog.ModifyDefaults(
+		beelog.WithTimestamp(),
+		beelog.WithLogMetrics(),
+	)
+
+	return beelog.NewLogger(
+		loggerName,
+		beelog.WithVerbosity(vLevel),
+	).Register(), nil
 }
 
 func getConfigByNetworkID(networkID uint64) *networkConfig {
@@ -153,7 +184,7 @@ func (bl *Beelite) getStamper(batchID []byte) (postage.Stamper, func() error, er
 }
 
 func (bl *Beelite) newStamperPutter(ctx context.Context, opts putterOptions) (storer.PutterSession, error) {
-	if !opts.Deferred /*&& bl.beeMode == DevMode*/ {
+	if !opts.Deferred {
 		return nil, errUnsupportedDevNodeOperation
 	}
 
@@ -196,7 +227,6 @@ func (bl *Beelite) getOrCreateSessionID(tagUid uint64) (uint64, error) {
 	return tag.TagID, err
 }
 
-// from node/statestore.go
 // checkOverlay checks the overlay is the same as stored in the statestore
 func checkOverlay(storer storage.StateStorer, overlay swarm.Address) error {
 

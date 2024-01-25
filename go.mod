@@ -1,4 +1,4 @@
-module github.com/onepeerlabs/bee-lite
+module github.com/Solar-Punk-Ltd/bee-lite
 
 go 1.21
 

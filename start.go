@@ -1,4 +1,4 @@
-package bee
+package beelite
 
 import (
 	"context"
@@ -201,7 +201,7 @@ func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelo
 		CORSAllowedOrigins:            []string{"*"},
 		TracingEnabled:                false,
 		TracingEndpoint:               ":6831",
-		TracingServiceName:            "swarmmobile",
+		TracingServiceName:            "beelite",
 		Logger:                        beelogger,
 		PaymentThreshold:              "100000000",
 		PaymentTolerance:              25,
@@ -242,10 +242,17 @@ func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelo
 	return beelite, err
 }
 
-func Start(mo *MobileOptions, password string, beelogger beelog.Logger) (bl *Beelite, errMain error) {
+func Start(mo *MobileOptions, password string, verbosity string) (bl *Beelite, errMain error) {
+	beelogger, err := newLogger(LoggerName, verbosity)
+	if err != nil {
+		errMain = fmt.Errorf("logger creation error: %w", err)
+		return nil, errMain
+	}
+
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer func() {
 		if errMain != nil && bl != nil && bl.bee != nil {
+			beelogger.Info("shutting down...")
 			ctxCancel()
 			err := bl.bee.Shutdown()
 			if err != nil {
@@ -261,7 +268,7 @@ func Start(mo *MobileOptions, password string, beelogger beelog.Logger) (bl *Bee
 		if resp.err != nil {
 			errMain = resp.err
 			beelogger.Error(resp.err, "failed to build bee node")
-			return nil, resp.err
+			return nil, errMain
 		}
 
 		bl = resp.beelite
@@ -271,16 +278,6 @@ func Start(mo *MobileOptions, password string, beelogger beelog.Logger) (bl *Bee
 		beelogger.Info("ctx done")
 	}
 
-	// Bee has fully started at this point, from now on we
-	// block main goroutine until it is interrupted or stopped
-	// select {
-	// case <-ctx.Done():
-	// case <-bl.bee.SyncingStopped():
-	// 	beelogger.Info("syncing has stopped")
-	// }
-
 	beelogger.Info("bee start finished")
-	// beelogger.Info("shutting down...")
-
 	return bl, errMain
 }

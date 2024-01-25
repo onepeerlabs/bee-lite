@@ -1,6 +1,6 @@
 GO ?= go
 GOLANGCI_LINT ?= $$($(GO) env GOPATH)/bin/golangci-lint
-GOLANGCI_LINT_VERSION ?= v1.30.0
+GOLANGCI_LINT_VERSION ?= v1.55.2
 
 .PHONY: lint
 lint: linter

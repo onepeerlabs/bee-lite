@@ -1,4 +1,4 @@
-package bee
+package beelite
 
 import (
 	"context"
@@ -14,8 +14,9 @@ func (bl *Beelite) GetChunk(parentContext context.Context, reference swarm.Addre
 	chunk, err := bl.storer.Download(true).Get(parentContext, reference)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			bl.logger.Debug("chunk: chunk not found. addr %s", reference) // TODO: sprintf fro the logs
-			return nil, fmt.Errorf("chunk: chunk not found. addr %s", reference)
+			msg := fmt.Sprintf("chunk: chunk not found. addr %s", reference)
+			bl.logger.Debug(msg)
+			return nil, fmt.Errorf(msg)
 
 		}
 		return nil, fmt.Errorf("chunk: chunk read error: %v ,addr %s", err, reference)
