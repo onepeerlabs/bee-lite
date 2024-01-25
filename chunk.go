@@ -5,16 +5,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ethersphere/bee/pkg/postage"
+
 	"github.com/ethersphere/bee/pkg/storage"
 	"github.com/ethersphere/bee/pkg/swarm"
 )
 
-func (b *Bee) GetChunk(parentContext context.Context, reference swarm.Address) (swarm.Chunk, error) {
-	chunk, err := b.ns.Get(parentContext, storage.ModeGetRequest, reference)
+func (bl *Beelite) GetChunk(parentContext context.Context, reference swarm.Address) (swarm.Chunk, error) {
+	chunk, err := bl.storer.Download(true).Get(parentContext, reference)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			b.logger.Tracef("chunk: chunk not found. addr %s", reference)
+			bl.logger.Debug("chunk: chunk not found. addr %s", reference) // TODO: sprintf fro the logs
 			return nil, fmt.Errorf("chunk: chunk not found. addr %s", reference)
 
 		}
@@ -23,20 +23,37 @@ func (b *Bee) GetChunk(parentContext context.Context, reference swarm.Address) (
 	return chunk, nil
 }
 
-func (b *Bee) AddChunk(parentContext context.Context, batchHex string, chunk swarm.Chunk) (swarm.Address, error) {
+func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, chunk swarm.Chunk) (swarm.Address, error) {
 	batch, err := hex.DecodeString(batchHex)
 	if err != nil {
 		err = fmt.Errorf("invalid postage batch")
 		return swarm.ZeroAddress, err
 	}
-	i, err := b.post.GetStampIssuer(batch)
+	var (
+		tag      uint64
+		deferred = false
+		pin = false
+	)
+
+	if deferred || pin {
+		tag, err = bl.getOrCreateSessionID(uint64(0))
+		if err != nil {
+			bl.logger.Error(err, "get or create tag failed")
+			return swarm.ZeroAddress, err
+		}
+	}
+	putter, err := bl.newStamperPutter(parentContext, putterOptions{
+		BatchID:  batch,
+		TagID:    tag,
+		Pin:      pin,
+		Deferred: deferred,
+	})
 	if err != nil {
-		err = fmt.Errorf("stamp issuer: %w", err)
+		bl.logger.Error(err, "get putter failed")
 		return swarm.ZeroAddress, err
 	}
-	stamper := postage.NewStamper(i, b.signer)
-	putter := &stamperPutter{Storer: b.ns, stamper: stamper}
-	_, err = putter.Put(parentContext, storage.ModePutUpload, chunk)
+
+	err = putter.Put(parentContext, chunk)
 	if err != nil {
 		return swarm.ZeroAddress, err
 	}

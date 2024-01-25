@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/storage"
 	"github.com/ethersphere/bee/pkg/swarm"
 )
 
@@ -16,7 +14,7 @@ const (
 
 type Topic [TopicLength]byte
 
-func (b *Bee) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) (reference swarm.Address, err error) {
+func (bl *Beelite) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) (reference swarm.Address, err error) {
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -26,21 +24,45 @@ func (b *Bee) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) (refe
 		err = fmt.Errorf("invalid postage batch")
 		return
 	}
-	i, err := b.post.GetStampIssuer(batch)
+	var (
+		tag      uint64
+		deferred = false
+		pin = false
+	)
+
+	if deferred || pin {
+		tag, err = bl.getOrCreateSessionID(uint64(0))
+		if err != nil {
+			bl.logger.Error(err, "get or create tag failed")
+			return
+		}
+	}
+	putter, err := bl.newStamperPutter(ctx, putterOptions{
+		BatchID:  batch,
+		TagID:    tag,
+		Pin:      pin,
+		Deferred: deferred,
+	})
 	if err != nil {
-		b.logger.Debugf("soc upload: postage batch issuer: %v", err)
+		bl.logger.Error(err, "get putter failed")
 		return
 	}
-	stamper := postage.NewStamper(i, b.signer)
+	stamper, _, err := bl.getStamper(batch)
+	if err != nil {
+		bl.logger.Error(err, "get stamper failed")
+		return
+	}
+
 	stamp, err := stamper.Stamp(ch.Address())
 	if err != nil {
-		b.logger.Debugf("soc upload: stamp: %v", err)
+		bl.logger.Error(err, "soc upload: stamping failed")
 		return
 	}
 	ch = ch.WithStamp(stamp)
-	_, err = b.ns.Put(ctx, storage.ModePutUpload, ch)
+	err = putter.Put(ctx, ch)
 	if err != nil {
-		return swarm.ZeroAddress, err
+		bl.logger.Error(err, "soc upload: put failed")
+		return
 	}
 
 	reference = ch.Address()
