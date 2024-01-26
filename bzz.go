@@ -44,7 +44,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context, batchHex, filename,
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.logger.Error(err, "get or create tag failed")
+			bl.Logger.Error(err, "get or create tag failed")
 			return
 		}
 	}
@@ -69,7 +69,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context, batchHex, filename,
 		filename = reference.String()
 	}
 
-	l := loadsave.New(bl.storer.ChunkStore()/*, bl.storer.Cache()*/, requestPipelineFactory(parentContext, putter, false/*, 0*/))
+	l := loadsave.New(bl.Storer.ChunkStore()/*, bl.Storer.Cache()*/, requestPipelineFactory(parentContext, putter, false/*, 0*/))
 	m, err := manifest.NewDefaultManifest(l, false)
 	if err != nil {
 		err = fmt.Errorf("(create manifest) upload failed 1: %w", err)
@@ -93,7 +93,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context, batchHex, filename,
 		err = fmt.Errorf("upload failed 3: %w", err)
 		return
 	}
-	bl.logger.Debug("bzz upload file: filename: %s hash: %s metadata: %v",
+	bl.Logger.Debug("bzz upload file: filename: %s hash: %s metadata: %v",
 		filename, reference.String(), fileMtdt)
 	storeSizeFn := []manifest.StoreSizeFunc{}
 	manifestReference, err := m.Store(parentContext, storeSizeFn...)
@@ -113,7 +113,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context, batchHex, filename,
 
 func (bl *Beelite) GetBzz(parentContext context.Context, address swarm.Address) (io.Reader, string, error) {
 	cache := true
-	ls := loadsave.NewReadonly(bl.storer.Download(cache))
+	ls := loadsave.NewReadonly(bl.Storer.Download(cache))
 	feedDereferenced := false
 
 	ctx := parentContext
@@ -125,7 +125,7 @@ FETCH:
 		ls,
 	)
 	if err != nil {
-		bl.logger.Error(err, "bzz download: not manifest", "address", address)
+		bl.Logger.Error(err, "bzz download: not manifest", "address", address)
 		return nil, "", err
 	}
 
@@ -138,20 +138,23 @@ FETCH:
 			//we have a feed manifest here
 			ch, cur, _, err := l.At(ctx, time.Now().Unix(), 0)
 			if err != nil {
-				bl.logger.Error(err, "bzz download: feed lookup failed")
+				bl.Logger.Error(err, "bzz download: feed lookup failed")
+				return nil, "", err
 			}
 			if ch == nil {
-				bl.logger.Error(err, "bzz download: feed lookup")
+				bl.Logger.Error(err, "bzz download: feed lookup")
+				return nil, "", err
 			}
 			ref, _, err := parseFeedUpdate(ch)
 			if err != nil {
-				bl.logger.Error(err, "bzz download: mapStructure feed update failed")
+				bl.Logger.Error(err, "bzz download: mapStructure feed update failed")
+				return nil, "", err
 			}
 			address = ref
 			feedDereferenced = true
 			curBytes, err := cur.MarshalBinary()
 			if err != nil {
-				bl.logger.Error(err, "bzz download: marshal index failed")
+				bl.Logger.Error(err, "bzz download: marshal index failed")
 				return nil, "", err
 			}
 			_ = curBytes
@@ -164,15 +167,15 @@ FETCH:
 		indexDocumentManifestEntry, err := m.Lookup(ctx, pathWithIndex)
 		if err == nil {
 			// index document exists
-			bl.logger.Debug("bzz download: serving path: %s", pathWithIndex)
+			bl.Logger.Debug("bzz download: serving path: %s", pathWithIndex)
 			mtdt := indexDocumentManifestEntry.Metadata()
 			fname, ok := mtdt[manifest.EntryMetadataFilenameKey]
 			if ok {
 				fname = filepath.Base(fname) // only keep the file name
 			}
 			// TODO: update when v2.0.0.0-rc.1 is available
-			// reader, _, err := joiner.New(ctx, bl.storer.Download(cache), bl.storer.Cache(), indexDocumentManifestEntry.Reference())
-			reader, _, err := joiner.New(ctx, bl.storer.Download(cache), indexDocumentManifestEntry.Reference())
+			// reader, _, err := joiner.New(ctx, bl.Storer.Download(cache), bl.Storer.Cache(), indexDocumentManifestEntry.Reference())
+			reader, _, err := joiner.New(ctx, bl.Storer.Download(cache), indexDocumentManifestEntry.Reference())
 			if err != nil {
 				if errors.Is(err, storage.ErrNotFound) {
 					return nil, "", fmt.Errorf("api download: not found : %s", err.Error())
@@ -221,7 +224,7 @@ func (bl *Beelite) manifestFeed(
 		return nil, fmt.Errorf("node lookup: %s", "feed metadata absent")
 	}
 	f := feeds.New(topic, common.BytesToAddress(owner))
-	return bl.feedFactory.NewLookup(*t, f)
+	return bl.FeedFactory.NewLookup(*t, f)
 }
 
 func parseFeedUpdate(ch swarm.Chunk) (swarm.Address, int64, error) {

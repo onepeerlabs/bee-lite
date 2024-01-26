@@ -33,7 +33,7 @@ func (bl *Beelite) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) 
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.logger.Error(err, "get or create tag failed")
+			bl.Logger.Error(err, "get or create tag failed")
 			return
 		}
 	}
@@ -44,24 +44,24 @@ func (bl *Beelite) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) 
 		Deferred: deferred,
 	})
 	if err != nil {
-		bl.logger.Error(err, "get putter failed")
+		bl.Logger.Error(err, "get putter failed")
 		return
 	}
 	stamper, _, err := bl.getStamper(batch)
 	if err != nil {
-		bl.logger.Error(err, "get stamper failed")
+		bl.Logger.Error(err, "get stamper failed")
 		return
 	}
 
 	stamp, err := stamper.Stamp(ch.Address())
 	if err != nil {
-		bl.logger.Error(err, "soc upload: stamping failed")
+		bl.Logger.Error(err, "soc upload: stamping failed")
 		return
 	}
 	ch = ch.WithStamp(stamp)
 	err = putter.Put(ctx, ch)
 	if err != nil {
-		bl.logger.Error(err, "soc upload: put failed")
+		bl.Logger.Error(err, "soc upload: put failed")
 		return
 	}
 

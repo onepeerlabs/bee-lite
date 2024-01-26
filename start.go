@@ -18,22 +18,29 @@ import (
 	"github.com/ethersphere/bee/pkg/swarm"
 )
 
-type MobileOptions struct {
-	FullNodeMode             bool
-	BootnodeMode             bool
-	Bootnodes                []string
-	StaticNodes              []string
-	DataDir                  string
-	WelcomeMessage           string
-	SwapEndpoint             string
-	BlockchainRpcEndpoint    string
-	SwapInitialDeposit       string
-	SwapEnable               bool
-	ChequebookEnable         bool
-	DebugAPIEnable           bool
-	Mainnet                  bool
-	NetworkID                uint64
-	NATAddr                  string
+type LiteOptions struct {
+	FullNodeMode              bool
+	BootnodeMode              bool
+	Bootnodes                 []string
+	StaticNodes               []string
+	DataDir                   string
+	WelcomeMessage            string
+	BlockchainRpcEndpoint     string
+	SwapInitialDeposit        string
+	PaymentThreshold          string
+	SwapEnable                bool
+	ChequebookEnable          bool
+	UsePostageSnapshot        bool
+	DebugAPIEnable            bool
+	Mainnet                   bool
+	NetworkID                 uint64
+	NATAddr                   string
+	CacheCapacity             uint64
+	DBOpenFilesLimit          uint64
+	DBWriteBufferSize         uint64
+	DBBlockCacheCapacity      uint64
+	DBDisableSeeksCompaction  bool
+	RetrievalCaching          bool
 }
 
 type buildBeeliteNodeResp struct {
@@ -55,10 +62,10 @@ type networkConfig struct {
 }
 
 
-func configureSigner(mo *MobileOptions, password string, beelogger beelog.Logger) (config *signerConfig, err error) {
+func configureSigner(lo *LiteOptions, password string, beelogger beelog.Logger) (config *signerConfig, err error) {
 	var keystore keystore.Service
 	const libp2pPKFilename = "libp2p_v2"
-	keystore = filekeystore.New(filepath.Join(mo.DataDir, "keys"))
+	keystore = filekeystore.New(filepath.Join(lo.DataDir, "keys"))
 
 	var signer crypto.Signer
 	var publicKey *ecdsa.PublicKey
@@ -113,57 +120,55 @@ func configureSigner(mo *MobileOptions, password string, beelogger beelog.Logger
 	}, nil
 }
 
-func buildBeeNodeAsync(ctx context.Context, mo *MobileOptions, password string, beelogger beelog.Logger) <-chan buildBeeliteNodeResp {
+func buildBeeNodeAsync(ctx context.Context, lo *LiteOptions, password string, beelogger beelog.Logger) <-chan buildBeeliteNodeResp {
 	respC := make(chan buildBeeliteNodeResp, 1)
 
 	go func() {
-		beelite, err := buildBeeNode(ctx, mo, password, beelogger)
+		beelite, err := buildBeeNode(ctx, lo, password, beelogger)
 		respC <- buildBeeliteNodeResp{beelite, err}
 	}()
 
 	return respC
 }
 
-func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelogger beelog.Logger) (*Beelite, error) {
+func buildBeeNode(ctx context.Context, lo *LiteOptions, password string, beelogger beelog.Logger) (*Beelite, error) {
 	var err error
 
 	debugAPIAddr := ":1635"
-	if !mo.DebugAPIEnable {
+	if !lo.DebugAPIEnable {
 		debugAPIAddr = ""
 	}
 
-	signerCfg, err := configureSigner(mo, password, beelogger)
+	signerCfg, err := configureSigner(lo, password, beelogger)
 	if err != nil {
 		return nil, err
 	}
 
-	if mo.DataDir == "" {
+	if lo.DataDir == "" {
 		return nil, errors.New("keystore/data dir empty")
 	}
 
-	bootnodeMode := mo.BootnodeMode
-	fullNodeMode := mo.FullNodeMode
-
+	bootnodeMode := lo.BootnodeMode
+	fullNodeMode := lo.FullNodeMode
 	if bootnodeMode && !fullNodeMode {
 		return nil, errors.New("boot node must be started as a full node")
 	}
 
-	mainnet := mo.Mainnet
-	networkID := mo.NetworkID
+	mainnet := lo.Mainnet
+	networkID := lo.NetworkID
 	if mainnet && networkID != chaincfg.Mainnet.NetworkID {
 		return nil, errors.New("provided network ID does not match mainnet")
 	}
 
-	bootnodes := mo.Bootnodes
+	bootnodes := lo.Bootnodes
 	networkCfg := getConfigByNetworkID(networkID)
-
-	if mo.Bootnodes != nil {
+	if lo.Bootnodes != nil {
 		networkCfg.bootNodes = bootnodes
 	}
 
 	staticNodesOpt := []string{}
-	if nil != mo.StaticNodes {
-		staticNodesOpt = mo.StaticNodes
+	if nil != lo.StaticNodes {
+		staticNodesOpt = lo.StaticNodes
 	}
 	staticNodes := make([]swarm.Address, 0, len(staticNodesOpt))
 	for _, p := range staticNodesOpt {
@@ -178,42 +183,36 @@ func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelo
 		return nil, errors.New("static nodes can only be configured on bootnodes")
 	}
 
-	swapEndpoint := mo.SwapEndpoint
-	blockchainRpcEndpoint := mo.BlockchainRpcEndpoint
-	if swapEndpoint != "" {
-		blockchainRpcEndpoint = swapEndpoint
-	}
-
 	beelite, err := NewBee(ctx, ":1634", signerCfg.publicKey, signerCfg.signer, networkID, beelogger, signerCfg.libp2pPrivateKey, signerCfg.pssPrivateKey, &Options{
-		DataDir:                       mo.DataDir,
-		CacheCapacity:                 defaultBlockCacheCapacity,
-		DBOpenFilesLimit:              50,
-		DBBlockCacheCapacity:          defaultBlockCacheCapacity,
-		DBWriteBufferSize:             defaultWriteBufferSize,
-		DBDisableSeeksCompaction:      false,
+		DataDir:                       lo.DataDir,
+		CacheCapacity:                 lo.CacheCapacity,
+		DBOpenFilesLimit:              lo.DBOpenFilesLimit,
+		DBBlockCacheCapacity:          lo.DBBlockCacheCapacity,
+		DBWriteBufferSize:             lo.DBWriteBufferSize,
+		DBDisableSeeksCompaction:      lo.DBDisableSeeksCompaction,
 		APIAddr:                       ":1633",
 		DebugAPIAddr:                  debugAPIAddr,
 		Addr:                          ":1634",
-		NATAddr:                       mo.NATAddr,
+		NATAddr:                       lo.NATAddr,
 		EnableWS:                      false,
-		WelcomeMessage:                mo.WelcomeMessage,
+		WelcomeMessage:                lo.WelcomeMessage,
 		Bootnodes:                     networkCfg.bootNodes,
 		CORSAllowedOrigins:            []string{"*"},
 		TracingEnabled:                false,
 		TracingEndpoint:               ":6831",
-		TracingServiceName:            "beelite",
+		TracingServiceName:            LoggerName,
 		Logger:                        beelogger,
-		PaymentThreshold:              "100000000",
+		PaymentThreshold:              lo.PaymentThreshold,
 		PaymentTolerance:              25,
 		PaymentEarly:                  50,
 		ResolverConnectionCfgs:        []multiresolver.ConnectionConfig{},
 		BootnodeMode:                  bootnodeMode,
-		BlockchainRpcEndpoint:         blockchainRpcEndpoint,
+		BlockchainRpcEndpoint:         lo.BlockchainRpcEndpoint,
 		SwapFactoryAddress:            "",
 		SwapLegacyFactoryAddresses:    []string{},
-		SwapInitialDeposit:            mo.SwapInitialDeposit,
-		SwapEnable:                    mo.SwapEnable,
-		ChequebookEnable:              mo.ChequebookEnable,
+		SwapInitialDeposit:            lo.SwapInitialDeposit,
+		SwapEnable:                    lo.SwapEnable,
+		ChequebookEnable:              lo.ChequebookEnable,
 		FullNodeMode:                  fullNodeMode,
 		PostageContractAddress:        "",
 		PostageContractStartBlock:     0,
@@ -222,9 +221,9 @@ func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelo
 		StakingContractAddress:        "",
 		BlockTime:                     networkCfg.blockTime,
 		DeployGasPrice:                "",
-		WarmupTime:                    time.Minute*5,
+		WarmupTime:                    0,
 		ChainID:                       networkCfg.chainID,
-		RetrievalCaching:              true,
+		RetrievalCaching:              lo.RetrievalCaching,
 		Resync:                        false,
 		BlockProfile:                  false,
 		MutexProfile:                  false,
@@ -233,7 +232,7 @@ func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelo
 		Restricted:                    false,
 		TokenEncryptionKey:            "",
 		AdminPasswordHash:             "",
-		UsePostageSnapshot:            false,
+		UsePostageSnapshot:            lo.UsePostageSnapshot,
 		EnableStorageIncentives:       true,
 		StatestoreCacheCapacity:       1000000,
 		TargetNeighborhood:            "",
@@ -242,7 +241,7 @@ func buildBeeNode(ctx context.Context, mo *MobileOptions, password string, beelo
 	return beelite, err
 }
 
-func Start(mo *MobileOptions, password string, verbosity string) (bl *Beelite, errMain error) {
+func Start(lo *LiteOptions, password string, verbosity string) (bl *Beelite, errMain error) {
 	beelogger, err := newLogger(LoggerName, verbosity)
 	if err != nil {
 		errMain = fmt.Errorf("logger creation error: %w", err)
@@ -251,17 +250,17 @@ func Start(mo *MobileOptions, password string, verbosity string) (bl *Beelite, e
 
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer func() {
-		if errMain != nil && bl != nil && bl.bee != nil {
+		if errMain != nil && bl != nil && bl.Bee != nil {
 			beelogger.Info("shutting down...")
 			ctxCancel()
-			err := bl.bee.Shutdown()
+			err := bl.Bee.Shutdown()
 			if err != nil {
 				beelogger.Error(err, "shutdown failed")
 			}
 		}
 	}()
 
-	respC := buildBeeNodeAsync(ctx, mo, password, beelogger)
+	respC := buildBeeNodeAsync(ctx, lo, password, beelogger)
 
 	select {
 	case resp := <-respC:
@@ -272,7 +271,7 @@ func Start(mo *MobileOptions, password string, verbosity string) (bl *Beelite, e
 		}
 
 		bl = resp.beelite
-		bl.bee = resp.beelite.bee
+		bl.Bee = resp.beelite.Bee
 		beelogger.Info("bee node built")
 	case <-ctx.Done():
 		beelogger.Info("ctx done")

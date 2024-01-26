@@ -1229,19 +1229,19 @@ func NewBee(
 	}
 
 	bl = &Beelite{
-		bee:                b,
-		overlayEthAddress:  overlayEthAddress,
-		feedFactory:        feedFactory,
-		logger:             logger,
-		storer:             localStore,
-		topologyDriver:     kad,
-		ctx:                ctx,
-		chequebookSvc:      chequebookService,
-		post:               post,
-		signer:             signer,
-		stamperStore:       stamperStore,
-		batchStore:         batchStore,
-		postageContract:    postageStampContractService,
+		Bee:                b,
+		OverlayEthAddress:  overlayEthAddress,
+		FeedFactory:        feedFactory,
+		Logger:             logger,
+		Storer:             localStore,
+		TopologyDriver:     kad,
+		Ctx:                ctx,
+		ChequebookSvc:      chequebookService,
+		Post:               post,
+		Signer:             signer,
+		StamperStore:       stamperStore,
+		BatchStore:         batchStore,
+		PostageContract:    postageStampContractService,
 	}
 
 	return bl, nil

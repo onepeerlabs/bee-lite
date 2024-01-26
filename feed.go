@@ -23,12 +23,12 @@ func requestPipelineFactory(ctx context.Context, s storage.Putter, encrypt bool/
 func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string) (reference swarm.Address, err error) {
 	ownerB, err := hex.DecodeString(owner)
 	if err != nil {
-		bl.logger.Debug("feed put: decode owner: %v", err)
+		bl.Logger.Debug("feed put: decode owner: %v", err)
 		return
 	}
 	topicB, err := hex.DecodeString(topic)
 	if err != nil {
-		bl.logger.Debug("feed put: decode topic: %v", err)
+		bl.Logger.Debug("feed put: decode topic: %v", err)
 		return
 	}
 	if batchHex == "" {
@@ -49,7 +49,7 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string) (
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.logger.Error(err, "get or create tag failed")
+			bl.Logger.Error(err, "get or create tag failed")
 			return
 		}
 	}
@@ -60,14 +60,14 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string) (
 		Deferred: deferred,
 	})
 	if err != nil {
-		bl.logger.Error(err, "get putter failed")
+		bl.Logger.Error(err, "get putter failed")
 		return
 	}
 
-	l := loadsave.New(bl.storer.ChunkStore()/*, bl.storer.Cache()*/, requestPipelineFactory(ctx, putter, false/*, 0*/))
+	l := loadsave.New(bl.Storer.ChunkStore()/*, bl.Storer.Cache()*/, requestPipelineFactory(ctx, putter, false/*, 0*/))
 	feedManifest, err := manifest.NewDefaultManifest(l, false)
 	if err != nil {
-		bl.logger.Debug("feed put: new manifest: %v", err)
+		bl.Logger.Debug("feed put: new manifest: %v", err)
 		return
 	}
 
@@ -82,12 +82,12 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string) (
 	// a feed manifest stores the metadata at the root "/" path
 	err = feedManifest.Add(ctx, "/", manifest.NewEntry(swarm.NewAddress(emptyAddr), meta))
 	if err != nil {
-		bl.logger.Debug("feed post: add manifest entry: %v", err)
+		bl.Logger.Debug("feed post: add manifest entry: %v", err)
 		return
 	}
 	reference, err = feedManifest.Store(ctx)
 	if err != nil {
-		bl.logger.Debug("feed post: store manifest: %v", err)
+		bl.Logger.Debug("feed post: store manifest: %v", err)
 		return
 	}
 	return

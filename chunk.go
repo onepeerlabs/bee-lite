@@ -11,11 +11,11 @@ import (
 )
 
 func (bl *Beelite) GetChunk(parentContext context.Context, reference swarm.Address) (swarm.Chunk, error) {
-	chunk, err := bl.storer.Download(true).Get(parentContext, reference)
+	chunk, err := bl.Storer.Download(true).Get(parentContext, reference)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			msg := fmt.Sprintf("chunk: chunk not found. addr %s", reference)
-			bl.logger.Debug(msg)
+			bl.Logger.Debug(msg)
 			return nil, fmt.Errorf(msg)
 
 		}
@@ -39,7 +39,7 @@ func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, chun
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.logger.Error(err, "get or create tag failed")
+			bl.Logger.Error(err, "get or create tag failed")
 			return swarm.ZeroAddress, err
 		}
 	}
@@ -50,7 +50,7 @@ func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, chun
 		Deferred: deferred,
 	})
 	if err != nil {
-		bl.logger.Error(err, "get putter failed")
+		bl.Logger.Error(err, "get putter failed")
 		return swarm.ZeroAddress, err
 	}
 

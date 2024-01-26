@@ -25,8 +25,6 @@ import (
 
 const (
 	LoggerName                     = "beelite"
-	defaultBlockCacheCapacity      = uint64(32 * 1024 * 1024)
-	defaultWriteBufferSize         = uint64(32 * 1024 * 1024)
 	feedMetadataEntryOwner         = "swarm-feed-owner"
 	feedMetadataEntryTopic         = "swarm-feed-topic"
 	feedMetadataEntryType          = "swarm-feed-type"
@@ -48,19 +46,19 @@ type Storer interface {
 }
 
 type Beelite struct {
-	bee                *Bee
-	overlayEthAddress  common.Address
-	feedFactory        feeds.Factory
-	storer             Storer
-	logger             beelog.Logger
-	topologyDriver     topology.Driver
-	ctx                context.Context
-	chequebookSvc      chequebook.Service
-	post               postage.Service
-	signer             crypto.Signer
-	postageContract    postagecontract.Interface
-	stamperStore       storage.Store
-	batchStore         postage.Storer
+	Bee                *Bee
+	OverlayEthAddress  common.Address
+	FeedFactory        feeds.Factory
+	Storer             Storer
+	Logger             beelog.Logger
+	TopologyDriver     topology.Driver
+	Ctx                context.Context
+	ChequebookSvc      chequebook.Service
+	Post               postage.Service
+	Signer             crypto.Signer
+	PostageContract    postagecontract.Interface
+	StamperStore       storage.Store
+	BatchStore         postage.Storer
 }
 
 type putterOptions struct {
@@ -141,7 +139,9 @@ func newLogger(loggerName string, verbosity string) (beelog.Logger, error) {
 }
 
 func getConfigByNetworkID(networkID uint64) *networkConfig {
-	config := networkConfig{}
+	config := networkConfig{
+		blockTime: 5 * time.Second,
+	}
 	switch networkID {
 	case chaincfg.Mainnet.NetworkID:
 		config.bootNodes = []string{"/dnsaddr/mainnet.ethswarm.org"}
@@ -166,21 +166,21 @@ var (
 )
 
 func (bl *Beelite) getStamper(batchID []byte) (postage.Stamper, func() error, error) {
-	exists, err := bl.batchStore.Exists(batchID)
+	exists, err := bl.BatchStore.Exists(batchID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("batch exists: %w", err)
 	}
 
-	issuer, save, err := bl.post.GetStampIssuer(batchID)
+	issuer, save, err := bl.Post.GetStampIssuer(batchID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stamp issuer: %w", err)
 	}
 
-	if usable := exists && bl.post.IssuerUsable(issuer); !usable {
+	if usable := exists && bl.Post.IssuerUsable(issuer); !usable {
 		return nil, nil, errBatchUnusable
 	}
 
-	return postage.NewStamper(bl.stamperStore, issuer, bl.signer), save, nil
+	return postage.NewStamper(bl.StamperStore, issuer, bl.Signer), save, nil
 }
 
 func (bl *Beelite) newStamperPutter(ctx context.Context, opts putterOptions) (storer.PutterSession, error) {
@@ -195,9 +195,9 @@ func (bl *Beelite) newStamperPutter(ctx context.Context, opts putterOptions) (st
 
 	var session storer.PutterSession
 	if opts.Deferred || opts.Pin {
-		session, err = bl.storer.Upload(ctx, opts.Pin, opts.TagID)
+		session, err = bl.Storer.Upload(ctx, opts.Pin, opts.TagID)
 	} else {
-		session = bl.storer.DirectUpload()
+		session = bl.Storer.DirectUpload()
 	}
 
 	if err != nil {
@@ -220,9 +220,9 @@ func (bl *Beelite) getOrCreateSessionID(tagUid uint64) (uint64, error) {
 	)
 	// if tag ID is not supplied, create a new tag
 	if tagUid == 0 {
-		tag, err = bl.storer.NewSession()
+		tag, err = bl.Storer.NewSession()
 	} else {
-		tag, err = bl.storer.Session(tagUid)
+		tag, err = bl.Storer.Session(tagUid)
 	}
 	return tag.TagID, err
 }
@@ -276,22 +276,22 @@ func OverlayAddr(root, password string) (common.Address, error) {
 
 
 func (bl *Beelite) ChequebookAddr() common.Address {
-	if bl.chequebookSvc != nil {
-		return bl.chequebookSvc.Address()
+	if bl.ChequebookSvc != nil {
+		return bl.ChequebookSvc.Address()
 	}
 	return common.HexToAddress(swarm.ZeroAddress.String())
 }
 
 func (bl *Beelite) ChequebookBalance() (*big.Int, error) {
-	if bl.chequebookSvc != nil {
-		return bl.chequebookSvc.Balance(bl.ctx)
+	if bl.ChequebookSvc != nil {
+		return bl.ChequebookSvc.Balance(bl.Ctx)
 	}
 	return nil, fmt.Errorf("chequebook not initialised")
 }
 
 func (bl *Beelite) ChequebookWithdraw(amount *big.Int) (common.Hash, error) {
-	if bl.chequebookSvc != nil {
-		return bl.chequebookSvc.Withdraw(bl.ctx, amount)
+	if bl.ChequebookSvc != nil {
+		return bl.ChequebookSvc.Withdraw(bl.Ctx, amount)
 	}
 	return common.HexToHash(""), fmt.Errorf("chequebook not initialised")
 }

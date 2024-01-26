@@ -1,37 +1,39 @@
 # bee-lite
-[![Go Reference](https://pkg.go.dev/badge/github.com/onepeerlabs/bee-lite.svg)](https://pkg.go.dev/github.com/onepeerlabs/bee-lite)
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/Solar-Punk-Ltd/bee-lite.svg)](https://pkg.go.dev/github.com/Solar-Punk-Ltd/bee-lite)
 
 bee-lite is an embeddable, lightweight bee node for applications to use swarm directly
 
 ## How to run
+
 ```
-o := &bee.Options{
-    FullNodeMode:             true,
-    Keystore:                 keystore,
+lo := &beelite.LiteOptions {
+    FullNodeMode:             false,
+    BootnodeMode:             false,
+    Bootnodes:                []string{"/dnsaddr/mainnet.ethswarm.org"},
+    StaticNodes:              []string{<STATIC_NODE_ADDRESSES>},
     DataDir:                  dataDir,
-    Addr:                     ":1836",
-    WelcomeMessage:           "welcome from bee-lite",
-    Bootnodes:                []string{"/dnsaddr/testnet.ethswarm.org"},
-    Logger:                   logging.New(os.Stdout, logrus.ErrorLevel),
-    SwapEndpoint:             <SWAP_ENDPOINT>,
+    WelcomeMessage:           "Welcome from bee-lite by Solar Punk",
+    BlockchainRpcEndpoint:    <RPC_ENDPOINT>,
     SwapInitialDeposit:       "10000000000000000",
-    SwapEnable:               true,
-    WarmupTime:               0,
-    ChainID:                  100,
-    ChequebookEnable:         true,
-    ChainEnable:              true,
-    BlockTime:                uint64(5),
     PaymentThreshold:         "100000000",
+    SwapEnable:               true,
+    ChequebookEnable:         true,
+    DebugAPIEnable:           false,
     UsePostageSnapshot:       false,
     Mainnet:                  true,
     NetworkID:                1,
-    DBOpenFilesLimit:         200,
+    NATAddr:                  "<NAT_ADDRESS>:<PORT>",
+    CacheCapacity:            32 * 1024 * 1024,
+    DBOpenFilesLimit:         50,
     DBWriteBufferSize:        32 * 1024 * 1024,
-    DBDisableSeeksCompaction: false,
     DBBlockCacheCapacity:     32 * 1024 * 1024,
+    DBDisableSeeksCompaction: false,
     RetrievalCaching:         true,
 }
-b, err := bee.Start(o, password)
+
+const loglevel = "4"
+bl, err := beelite.Start(lo, password, loglevel)
 if err != nil {
     return err
 }
