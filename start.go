@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	chaincfg "github.com/ethersphere/bee/pkg/config"
@@ -19,40 +22,40 @@ import (
 )
 
 type LiteOptions struct {
-	FullNodeMode              bool
-	BootnodeMode              bool
-	Bootnodes                 []string
-	StaticNodes               []string
-	DataDir                   string
-	WelcomeMessage            string
-	BlockchainRpcEndpoint     string
-	SwapInitialDeposit        string
-	PaymentThreshold          string
-	SwapEnable                bool
-	ChequebookEnable          bool
-	UsePostageSnapshot        bool
-	DebugAPIEnable            bool
-	Mainnet                   bool
-	NetworkID                 uint64
-	NATAddr                   string
-	CacheCapacity             uint64
-	DBOpenFilesLimit          uint64
-	DBWriteBufferSize         uint64
-	DBBlockCacheCapacity      uint64
-	DBDisableSeeksCompaction  bool
-	RetrievalCaching          bool
+	FullNodeMode             bool
+	BootnodeMode             bool
+	Bootnodes                []string
+	StaticNodes              []string
+	DataDir                  string
+	WelcomeMessage           string
+	BlockchainRpcEndpoint    string
+	SwapInitialDeposit       string
+	PaymentThreshold         string
+	SwapEnable               bool
+	ChequebookEnable         bool
+	UsePostageSnapshot       bool
+	DebugAPIEnable           bool
+	Mainnet                  bool
+	NetworkID                uint64
+	NATAddr                  string
+	CacheCapacity            uint64
+	DBOpenFilesLimit         uint64
+	DBWriteBufferSize        uint64
+	DBBlockCacheCapacity     uint64
+	DBDisableSeeksCompaction bool
+	RetrievalCaching         bool
 }
 
 type buildBeeliteNodeResp struct {
 	beelite *Beelite
-	err error
+	err     error
 }
 
 type signerConfig struct {
-	signer              crypto.Signer
-	publicKey           *ecdsa.PublicKey
-	libp2pPrivateKey    *ecdsa.PrivateKey
-	pssPrivateKey       *ecdsa.PrivateKey
+	signer           crypto.Signer
+	publicKey        *ecdsa.PublicKey
+	libp2pPrivateKey *ecdsa.PrivateKey
+	pssPrivateKey    *ecdsa.PrivateKey
 }
 
 type networkConfig struct {
@@ -60,7 +63,6 @@ type networkConfig struct {
 	blockTime time.Duration
 	chainID   int64
 }
-
 
 func configureSigner(lo *LiteOptions, password string, beelogger beelog.Logger) (config *signerConfig, err error) {
 	var keystore keystore.Service
@@ -79,7 +81,6 @@ func configureSigner(lo *LiteOptions, password string, beelogger beelog.Logger) 
 	}
 	signer = crypto.NewDefaultSigner(swarmPrivateKey)
 	publicKey = &swarmPrivateKey.PublicKey
-
 
 	beelogger.Info("swarm public key", "public_key", hex.EncodeToString(crypto.EncodeSecp256k1PublicKey(publicKey)))
 
@@ -105,7 +106,6 @@ func configureSigner(lo *LiteOptions, password string, beelogger beelog.Logger) 
 
 	beelogger.Info("pss public key", "public_key", hex.EncodeToString(crypto.EncodeSecp256k1PublicKey(&pssPrivateKey.PublicKey)))
 
-	// postinst and post scripts inside packaging/{deb,rpm} depend and parse on this log output
 	overlayEthAddress, err := signer.EthereumAddress()
 	if err != nil {
 		return nil, err
@@ -249,10 +249,21 @@ func Start(lo *LiteOptions, password string, verbosity string) (bl *Beelite, err
 	}
 
 	ctx, ctxCancel := context.WithCancel(context.Background())
+	sysInterruptChannel := make(chan os.Signal, 1)
+	signal.Notify(sysInterruptChannel, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		select {
+		case <-sysInterruptChannel:
+			beelogger.Info("received interrupt signal")
+			ctxCancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	defer func() {
 		if errMain != nil && bl != nil && bl.Bee != nil {
 			beelogger.Info("shutting down...")
-			ctxCancel()
 			err := bl.Bee.Shutdown()
 			if err != nil {
 				beelogger.Error(err, "shutdown failed")
@@ -261,7 +272,7 @@ func Start(lo *LiteOptions, password string, verbosity string) (bl *Beelite, err
 	}()
 
 	respC := buildBeeNodeAsync(ctx, lo, password, beelogger)
-
+	// Wait for bee node to fully build and initialize
 	select {
 	case resp := <-respC:
 		if resp.err != nil {
@@ -275,6 +286,7 @@ func Start(lo *LiteOptions, password string, verbosity string) (bl *Beelite, err
 		beelogger.Info("bee node built")
 	case <-ctx.Done():
 		beelogger.Info("ctx done")
+		return nil, ctx.Err()
 	}
 
 	beelogger.Info("bee start finished")

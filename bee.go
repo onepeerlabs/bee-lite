@@ -180,9 +180,9 @@ const (
 	reserveWakeUpDuration         = 30 * time.Minute          // time to wait before waking up reserveWorker
 	reserveTreshold               = ReserveCapacity * 5 / 10
 	reserveMinimumRadius          = 0
-	maxDelay                = 1 * time.Minute
-	cancellationDepth       = 12
-	additionalConfirmations = 2
+	maxDelay                      = 1 * time.Minute
+	cancellationDepth             = 12
+	additionalConfirmations       = 2
 )
 
 func initChequeStoreCashout(
@@ -1229,19 +1229,20 @@ func NewBee(
 	}
 
 	bl = &Beelite{
-		Bee:                b,
-		OverlayEthAddress:  overlayEthAddress,
-		FeedFactory:        feedFactory,
-		Logger:             logger,
-		Storer:             localStore,
-		TopologyDriver:     kad,
-		Ctx:                ctx,
-		ChequebookSvc:      chequebookService,
-		Post:               post,
-		Signer:             signer,
-		StamperStore:       stamperStore,
-		BatchStore:         batchStore,
-		PostageContract:    postageStampContractService,
+		Bee:               b,
+		OverlayEthAddress: overlayEthAddress,
+		FeedFactory:       feedFactory,
+		Logger:            logger,
+		Storer:            localStore,
+		TopologyDriver:    kad,
+		Ctx:               ctx,
+		ChequebookSvc:     chequebookService,
+		Post:              post,
+		Signer:            signer,
+		StamperStore:      stamperStore,
+		BatchStore:        batchStore,
+		PostageContract:   postageStampContractService,
+		BeeNodeMode:       beeNodeMode,
 	}
 
 	return bl, nil

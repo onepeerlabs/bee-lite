@@ -33,7 +33,7 @@ func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, chun
 	var (
 		tag      uint64
 		deferred = false
-		pin = false
+		pin      = false
 	)
 
 	if deferred || pin {

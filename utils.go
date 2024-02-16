@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethersphere/bee/pkg/api"
 	chaincfg "github.com/ethersphere/bee/pkg/config"
 	"github.com/ethersphere/bee/pkg/crypto"
 	"github.com/ethersphere/bee/pkg/feeds"
@@ -24,15 +25,15 @@ import (
 )
 
 const (
-	LoggerName                     = "beelite"
-	feedMetadataEntryOwner         = "swarm-feed-owner"
-	feedMetadataEntryTopic         = "swarm-feed-topic"
-	feedMetadataEntryType          = "swarm-feed-type"
-	balanceCheckBackoffDuration    = 20 * time.Second
-	erc20SmallUnitStr              = "10000000000000000"
-	ethSmallUnitStr                = "1000000000000000000"
-	overlayNonce                   = "overlayV2_nonce"
-	noncedOverlayKey               = "nonce-overlay"
+	LoggerName                  = "beelite"
+	feedMetadataEntryOwner      = "swarm-feed-owner"
+	feedMetadataEntryTopic      = "swarm-feed-topic"
+	feedMetadataEntryType       = "swarm-feed-type"
+	balanceCheckBackoffDuration = 20 * time.Second
+	erc20SmallUnitStr           = "10000000000000000"
+	ethSmallUnitStr             = "1000000000000000000"
+	overlayNonce                = "overlayV2_nonce"
+	noncedOverlayKey            = "nonce-overlay"
 )
 
 type Storer interface {
@@ -46,19 +47,20 @@ type Storer interface {
 }
 
 type Beelite struct {
-	Bee                *Bee
-	OverlayEthAddress  common.Address
-	FeedFactory        feeds.Factory
-	Storer             Storer
-	Logger             beelog.Logger
-	TopologyDriver     topology.Driver
-	Ctx                context.Context
-	ChequebookSvc      chequebook.Service
-	Post               postage.Service
-	Signer             crypto.Signer
-	PostageContract    postagecontract.Interface
-	StamperStore       storage.Store
-	BatchStore         postage.Storer
+	Bee               *Bee
+	OverlayEthAddress common.Address
+	FeedFactory       feeds.Factory
+	Storer            Storer
+	Logger            beelog.Logger
+	TopologyDriver    topology.Driver
+	Ctx               context.Context
+	ChequebookSvc     chequebook.Service
+	Post              postage.Service
+	Signer            crypto.Signer
+	PostageContract   postagecontract.Interface
+	StamperStore      storage.Store
+	BatchStore        postage.Storer
+	BeeNodeMode       api.BeeNodeMode
 }
 
 type putterOptions struct {
@@ -161,8 +163,8 @@ func getConfigByNetworkID(networkID uint64) *networkConfig {
 }
 
 var (
-	errBatchUnusable                    = errors.New("batch not usable")
-	errUnsupportedDevNodeOperation      = errors.New("operation not supported in dev mode")
+	errBatchUnusable               = errors.New("batch not usable")
+	errUnsupportedDevNodeOperation = errors.New("operation not supported in dev mode")
 )
 
 func (bl *Beelite) getStamper(batchID []byte) (postage.Stamper, func() error, error) {
@@ -184,7 +186,7 @@ func (bl *Beelite) getStamper(batchID []byte) (postage.Stamper, func() error, er
 }
 
 func (bl *Beelite) newStamperPutter(ctx context.Context, opts putterOptions) (storer.PutterSession, error) {
-	if !opts.Deferred {
+	if !opts.Deferred && bl.BeeNodeMode == api.DevMode {
 		return nil, errUnsupportedDevNodeOperation
 	}
 
@@ -273,7 +275,6 @@ func OverlayAddr(root, password string) (common.Address, error) {
 	signer := crypto.NewDefaultSigner(swarmPrivateKey)
 	return signer.EthereumAddress()
 }
-
 
 func (bl *Beelite) ChequebookAddr() common.Address {
 	if bl.ChequebookSvc != nil {

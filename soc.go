@@ -27,7 +27,7 @@ func (bl *Beelite) AddSOC(ctx context.Context, batchHex string, ch swarm.Chunk) 
 	var (
 		tag      uint64
 		deferred = false
-		pin = false
+		pin      = false
 	)
 
 	if deferred || pin {

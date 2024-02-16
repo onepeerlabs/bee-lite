@@ -8,12 +8,11 @@ import (
 	"io"
 
 	"github.com/ethersphere/bee/pkg/file/joiner"
-	"github.com/ethersphere/bee/pkg/file/pipeline/builder"
 	"github.com/ethersphere/bee/pkg/storage"
 	"github.com/ethersphere/bee/pkg/swarm"
 )
 
-func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, reader io.Reader) (reference swarm.Address, err error) {
+func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encrypt bool, reader io.Reader) (reference swarm.Address, err error) {
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -27,7 +26,7 @@ func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, read
 	var (
 		tag      uint64
 		deferred = false
-		pin = false
+		pin      = false
 	)
 
 	if deferred || pin {
@@ -48,13 +47,18 @@ func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, read
 		return
 	}
 
-	encrypt := false
 	// TODO: v2.0.0-rc1 rLevel := redundancyLevelFromInt(r)
 	// var rLevel redundancy.Level
-	pipe := builder.NewPipelineBuilder(parentContext, putter, encrypt)
-	reference, err = builder.FeedPipeline(parentContext, pipe, reader)
+	p := requestPipelineFn(putter, encrypt)
+	reference, err = p(parentContext, reader)
 	if err != nil {
-		err = fmt.Errorf("upload failed: %w", err)
+		err = fmt.Errorf("(split write all) upload failed 1: %w", err)
+		return
+	}
+
+	err = putter.Done(reference)
+	if err != nil {
+		err = fmt.Errorf("(done split) upload failed 2: %w", err)
 		return
 	}
 	return
