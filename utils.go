@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"path/filepath"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,7 +12,6 @@ import (
 	chaincfg "github.com/ethersphere/bee/pkg/config"
 	"github.com/ethersphere/bee/pkg/crypto"
 	"github.com/ethersphere/bee/pkg/feeds"
-	filekeystore "github.com/ethersphere/bee/pkg/keystore/file"
 	beelog "github.com/ethersphere/bee/pkg/log"
 	"github.com/ethersphere/bee/pkg/postage"
 	"github.com/ethersphere/bee/pkg/postage/postagecontract"
@@ -264,16 +262,6 @@ func setOverlay(s storage.StateStorer, overlay swarm.Address, nonce []byte) erro
 		s.Put(overlayNonce, nonce),
 		s.Put(noncedOverlayKey, overlay),
 	)
-}
-
-func OverlayAddr(root, password string) (common.Address, error) {
-	keystore := filekeystore.New(filepath.Join(root, "keys"))
-	swarmPrivateKey, _, err := keystore.Key("swarm", password, crypto.EDGSecp256_K1)
-	if err != nil {
-		return common.Address{}, err
-	}
-	signer := crypto.NewDefaultSigner(swarmPrivateKey)
-	return signer.EthereumAddress()
 }
 
 func (bl *Beelite) ChequebookAddr() common.Address {

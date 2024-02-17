@@ -16,6 +16,7 @@ import (
 	"github.com/ethersphere/bee/pkg/crypto"
 	"github.com/ethersphere/bee/pkg/keystore"
 	filekeystore "github.com/ethersphere/bee/pkg/keystore/file"
+	memkeystore "github.com/ethersphere/bee/pkg/keystore/mem"
 	beelog "github.com/ethersphere/bee/pkg/log"
 	"github.com/ethersphere/bee/pkg/resolver/multiresolver"
 	"github.com/ethersphere/bee/pkg/swarm"
@@ -67,7 +68,12 @@ type networkConfig struct {
 func configureSigner(lo *LiteOptions, password string, beelogger beelog.Logger) (config *signerConfig, err error) {
 	var keystore keystore.Service
 	const libp2pPKFilename = "libp2p_v2"
-	keystore = filekeystore.New(filepath.Join(lo.DataDir, "keys"))
+	if lo.DataDir == "" {
+		keystore = memkeystore.New()
+		beelogger.Warning("data directory not provided, keys are not persisted")
+	} else {
+		keystore = filekeystore.New(filepath.Join(lo.DataDir, "keys"))
+	}
 
 	var signer crypto.Signer
 	var publicKey *ecdsa.PublicKey
@@ -142,10 +148,6 @@ func buildBeeNode(ctx context.Context, lo *LiteOptions, password string, beelogg
 	signerCfg, err := configureSigner(lo, password, beelogger)
 	if err != nil {
 		return nil, err
-	}
-
-	if lo.DataDir == "" {
-		return nil, errors.New("keystore/data dir empty")
 	}
 
 	bootnodeMode := lo.BootnodeMode
