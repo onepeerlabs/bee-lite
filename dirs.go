@@ -52,12 +52,12 @@ func (bl *Beelite) AddDirBzz(
 	var dReader dirReader
 	switch mediaType {
 	case contentTypeTar:
-		dReader = &tarReader{r: tar.NewReader(reader), logger: bl.Logger}
+		dReader = &tarReader{r: tar.NewReader(reader), logger: bl.logger}
 	case multiPartFormData:
 		dReader = &multipartReader{r: multipart.NewReader(reader, params["boundary"])}
 	default:
 		err = errInvalidContentType
-		bl.Logger.Error(err, "invalid content-type for directory upload")
+		bl.logger.Error(err, "invalid content-type for directory upload")
 		return
 	}
 
@@ -80,7 +80,7 @@ func (bl *Beelite) AddDirBzz(
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.Logger.Error(err, "get or create tag failed")
+			bl.logger.Error(err, "get or create tag failed")
 			return
 		}
 	}
@@ -100,7 +100,7 @@ func (bl *Beelite) AddDirBzz(
 		encrypt,
 		dReader,
 		putter,
-		bl.Storer.ChunkStore(),
+		bl.storer.ChunkStore(),
 		indexFilename,
 		errorFilename,
 		// rLevel,
@@ -159,7 +159,7 @@ func (bl *Beelite) storeDir(
 		if err != nil {
 			return swarm.ZeroAddress, fmt.Errorf("store dir file: %w", err)
 		}
-		bl.Logger.Debug("bzz upload dir: file dir uploaded", "file_path", fileInfo.Path, "address", fileReference)
+		bl.logger.Debug("bzz upload dir: file dir uploaded", "file_path", fileInfo.Path, "address", fileReference)
 
 		fileMtdt := map[string]string{
 			manifest.EntryMetadataContentTypeKey: fileInfo.ContentType,
@@ -200,7 +200,7 @@ func (bl *Beelite) storeDir(
 	if err != nil {
 		return swarm.ZeroAddress, fmt.Errorf("store manifest: %w", err)
 	}
-	bl.Logger.Debug("bzz upload dir: uploaded dir finished", "address", manifestReference)
+	bl.logger.Debug("bzz upload dir: uploaded dir finished", "address", manifestReference)
 
 	return manifestReference, nil
 }

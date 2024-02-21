@@ -8,7 +8,7 @@ import (
 )
 
 func (bl *Beelite) GetAllBatches() []*postage.StampIssuer {
-	return bl.Post.StampIssuers()
+	return bl.post.StampIssuers()
 }
 
 func (bl *Beelite) GetUsableBatches() []*postage.StampIssuer {
@@ -16,5 +16,5 @@ func (bl *Beelite) GetUsableBatches() []*postage.StampIssuer {
 }
 
 func (bl *Beelite) BuyStamp(amount *big.Int, depth uint64, label string, immutable bool) (common.Hash, []byte, error) {
-	return bl.PostageContract.CreateBatch(bl.Ctx, amount, uint8(depth), immutable, label)
+	return bl.postageContract.CreateBatch(bl.ctx, amount, uint8(depth), immutable, label)
 }

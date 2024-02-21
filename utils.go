@@ -34,31 +34,21 @@ const (
 	noncedOverlayKey            = "nonce-overlay"
 )
 
-type Storer interface {
-	storer.UploadStore
-	storer.PinStore
-	storer.CacheStore
-	storer.NetStore
-	storer.LocalStore
-	storer.RadiusChecker
-	storer.Debugger
-}
-
 type Beelite struct {
-	Bee               *Bee
-	OverlayEthAddress common.Address
-	FeedFactory       feeds.Factory
-	Storer            Storer
-	Logger            beelog.Logger
-	TopologyDriver    topology.Driver
-	Ctx               context.Context
-	ChequebookSvc     chequebook.Service
-	Post              postage.Service
-	Signer            crypto.Signer
-	PostageContract   postagecontract.Interface
-	StamperStore      storage.Store
-	BatchStore        postage.Storer
-	BeeNodeMode       api.BeeNodeMode
+	bee               *Bee
+	overlayEthAddress common.Address
+	feedFactory       feeds.Factory
+	storer            api.Storer
+	logger            beelog.Logger
+	topologyDriver    topology.Driver
+	ctx               context.Context
+	chequebookSvc     chequebook.Service
+	post              postage.Service
+	signer            crypto.Signer
+	postageContract   postagecontract.Interface
+	stamperStore      storage.Store
+	batchStore        postage.Storer
+	beeNodeMode       api.BeeNodeMode
 }
 
 type putterOptions struct {
@@ -165,26 +155,47 @@ var (
 	errUnsupportedDevNodeOperation = errors.New("operation not supported in dev mode")
 )
 
+// TODO: use Cleanup method for PutterSessions
+func (p *putterSessionWrapper) Cleanup() error {
+	return errors.Join(p.PutterSession.Cleanup(), p.save())
+}
+
+func (p *putterSessionWrapper) Put(ctx context.Context, chunk swarm.Chunk) error {
+	stamp, err := p.stamper.Stamp(chunk.Address())
+	if err != nil {
+		return err
+	}
+	return p.PutterSession.Put(ctx, chunk.WithStamp(stamp))
+}
+
+func (p *putterSessionWrapper) Done(ref swarm.Address) error {
+	err := p.PutterSession.Done(ref)
+	if err != nil {
+		return err
+	}
+	return p.save()
+}
+
 func (bl *Beelite) getStamper(batchID []byte) (postage.Stamper, func() error, error) {
-	exists, err := bl.BatchStore.Exists(batchID)
+	exists, err := bl.batchStore.Exists(batchID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("batch exists: %w", err)
 	}
 
-	issuer, save, err := bl.Post.GetStampIssuer(batchID)
+	issuer, save, err := bl.post.GetStampIssuer(batchID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stamp issuer: %w", err)
 	}
 
-	if usable := exists && bl.Post.IssuerUsable(issuer); !usable {
+	if usable := exists && bl.post.IssuerUsable(issuer); !usable {
 		return nil, nil, errBatchUnusable
 	}
 
-	return postage.NewStamper(bl.StamperStore, issuer, bl.Signer), save, nil
+	return postage.NewStamper(bl.stamperStore, issuer, bl.signer), save, nil
 }
 
 func (bl *Beelite) newStamperPutter(ctx context.Context, opts putterOptions) (storer.PutterSession, error) {
-	if !opts.Deferred && bl.BeeNodeMode == api.DevMode {
+	if !opts.Deferred && bl.BeeNodeMode() == api.DevMode {
 		return nil, errUnsupportedDevNodeOperation
 	}
 
@@ -195,9 +206,9 @@ func (bl *Beelite) newStamperPutter(ctx context.Context, opts putterOptions) (st
 
 	var session storer.PutterSession
 	if opts.Deferred || opts.Pin {
-		session, err = bl.Storer.Upload(ctx, opts.Pin, opts.TagID)
+		session, err = bl.storer.Upload(ctx, opts.Pin, opts.TagID)
 	} else {
-		session = bl.Storer.DirectUpload()
+		session = bl.storer.DirectUpload()
 	}
 
 	if err != nil {
@@ -220,9 +231,9 @@ func (bl *Beelite) getOrCreateSessionID(tagUid uint64) (uint64, error) {
 	)
 	// if tag ID is not supplied, create a new tag
 	if tagUid == 0 {
-		tag, err = bl.Storer.NewSession()
+		tag, err = bl.storer.NewSession()
 	} else {
-		tag, err = bl.Storer.Session(tagUid)
+		tag, err = bl.storer.Session(tagUid)
 	}
 	return tag.TagID, err
 }
@@ -265,22 +276,34 @@ func setOverlay(s storage.StateStorer, overlay swarm.Address, nonce []byte) erro
 }
 
 func (bl *Beelite) ChequebookAddr() common.Address {
-	if bl.ChequebookSvc != nil {
-		return bl.ChequebookSvc.Address()
+	if bl.chequebookSvc != nil {
+		return bl.chequebookSvc.Address()
 	}
 	return common.HexToAddress(swarm.ZeroAddress.String())
 }
 
 func (bl *Beelite) ChequebookBalance() (*big.Int, error) {
-	if bl.ChequebookSvc != nil {
-		return bl.ChequebookSvc.Balance(bl.Ctx)
+	if bl.chequebookSvc != nil {
+		return bl.chequebookSvc.Balance(bl.ctx)
 	}
 	return nil, fmt.Errorf("chequebook not initialised")
 }
 
 func (bl *Beelite) ChequebookWithdraw(amount *big.Int) (common.Hash, error) {
-	if bl.ChequebookSvc != nil {
-		return bl.ChequebookSvc.Withdraw(bl.Ctx, amount)
+	if bl.chequebookSvc != nil {
+		return bl.chequebookSvc.Withdraw(bl.ctx, amount)
 	}
 	return common.HexToHash(""), fmt.Errorf("chequebook not initialised")
+}
+
+func (bl *Beelite) OverlayEthAddress() common.Address {
+	return bl.overlayEthAddress
+}
+
+func (bl *Beelite) BeeNodeMode() api.BeeNodeMode {
+	return bl.beeNodeMode
+}
+
+func (bl *Beelite) ConnectedPeerCount() int {
+	return bl.topologyDriver.Snapshot().Connected
 }

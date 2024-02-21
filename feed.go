@@ -33,22 +33,22 @@ func requestPipelineFactory(ctx context.Context, s storage.Putter, encrypt bool 
 func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, encrypt bool) (reference swarm.Address, err error) {
 	ownerB, err := hex.DecodeString(owner)
 	if err != nil {
-		bl.Logger.Debug("feed put: decode owner: %v", err)
-		return
+		bl.logger.Debug("feed put: decode owner: %v", err)
+		return swarm.ZeroAddress, err
 	}
 	topicB, err := hex.DecodeString(topic)
 	if err != nil {
-		bl.Logger.Debug("feed put: decode topic: %v", err)
-		return
+		bl.logger.Debug("feed put: decode topic: %v", err)
+		return swarm.ZeroAddress, err
 	}
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
-		return
+		return swarm.ZeroAddress, err
 	}
 	batch, err := hex.DecodeString(batchHex)
 	if err != nil {
 		err = fmt.Errorf("invalid postage batch")
-		return
+		return swarm.ZeroAddress, err
 	}
 	var (
 		tag      uint64
@@ -59,8 +59,8 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.Logger.Error(err, "get or create tag failed")
-			return
+			bl.logger.Error(err, "get or create tag failed")
+			return swarm.ZeroAddress, err
 		}
 	}
 	putter, err := bl.newStamperPutter(ctx, putterOptions{
@@ -70,16 +70,16 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 		Deferred: deferred,
 	})
 	if err != nil {
-		bl.Logger.Error(err, "get putter failed")
-		return
+		bl.logger.Error(err, "get putter failed")
+		return swarm.ZeroAddress, err
 	}
 
 	factory := requestPipelineFactory(ctx, putter, encrypt /*, 0*/)
-	l := loadsave.New(bl.Storer.ChunkStore() /*, bl.Storer.Cache()*/, factory)
+	l := loadsave.New(bl.storer.ChunkStore() /*, bl.storer.Cache()*/, factory)
 	feedManifest, err := manifest.NewDefaultManifest(l, encrypt)
 	if err != nil {
-		bl.Logger.Debug("feed put: new manifest: %v", err)
-		return
+		bl.logger.Debug("feed put: create manifest failed: %v", err)
+		return swarm.ZeroAddress, err
 	}
 
 	meta := map[string]string{
@@ -89,17 +89,23 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 	}
 
 	emptyAddr := make([]byte, 32)
-
 	// a feed manifest stores the metadata at the root "/" path
 	err = feedManifest.Add(ctx, "/", manifest.NewEntry(swarm.NewAddress(emptyAddr), meta))
 	if err != nil {
-		bl.Logger.Debug("feed post: add manifest entry: %v", err)
-		return
+		bl.logger.Debug("feed post: add manifest entry failed: %v", err)
+		return swarm.ZeroAddress, err
 	}
 	reference, err = feedManifest.Store(ctx)
 	if err != nil {
-		bl.Logger.Debug("feed post: store manifest: %v", err)
-		return
+		bl.logger.Debug("feed post: store manifest failed: %v", err)
+		return swarm.ZeroAddress, err
 	}
+
+	err = putter.Done(reference)
+	if err != nil {
+		bl.logger.Error(err, "done split failed")
+		return swarm.ZeroAddress, err
+	}
+
 	return
 }

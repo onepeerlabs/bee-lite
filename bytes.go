@@ -32,7 +32,7 @@ func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encr
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.Logger.Error(err, "get or create tag failed")
+			bl.logger.Error(err, "get or create tag failed")
 			return
 		}
 	}
@@ -43,7 +43,7 @@ func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encr
 		Deferred: deferred,
 	})
 	if err != nil {
-		bl.Logger.Error(err, "get putter failed")
+		bl.logger.Error(err, "get putter failed")
 		return
 	}
 
@@ -65,10 +65,12 @@ func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encr
 }
 
 func (bl *Beelite) GetBytes(parentContext context.Context, reference swarm.Address) (io.Reader, error) {
-	reader, _, err := joiner.New(parentContext, bl.Storer.Download(true), reference)
+	// TODO: add cache option
+	cache := true
+	reader, _, err := joiner.New(parentContext, bl.storer.Download(cache), reference)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			return nil, fmt.Errorf("api download: not found : %v", err.Error())
+			return nil, fmt.Errorf("api download: not found : %w", err)
 		}
 		return nil, fmt.Errorf("unexpected error: %v: %v", reference, err)
 	}

@@ -39,6 +39,8 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 		err = fmt.Errorf("invalid postage batch")
 		return
 	}
+
+	// TODO: add deferred and pinning options
 	var (
 		tag      uint64
 		deferred = false
@@ -48,7 +50,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 	if deferred || pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
-			bl.Logger.Error(err, "get or create tag failed")
+			bl.logger.Error(err, "get or create tag failed")
 			return
 		}
 	}
@@ -75,7 +77,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 	}
 
 	factory := requestPipelineFactory(parentContext, putter, encrypt /*, 0*/)
-	l := loadsave.New(bl.Storer.ChunkStore() /*, bl.Storer.Cache()*/, factory)
+	l := loadsave.New(bl.storer.ChunkStore() /*, bl.storer.Cache()*/, factory)
 	m, err := manifest.NewDefaultManifest(l, encrypt)
 	if err != nil {
 		err = fmt.Errorf("(create manifest) upload failed 1: %w", err)
@@ -99,7 +101,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 		err = fmt.Errorf("upload failed 3: %w", err)
 		return
 	}
-	bl.Logger.Debug("bzz upload: filename", filename, "hash", reference.String(), "metadata", fileMtdt)
+	bl.logger.Debug("bzz upload:", "filename", filename, "hash", reference.String(), "metadata", fileMtdt)
 
 	storeSizeFn := []manifest.StoreSizeFunc{}
 	manifestReference, err := m.Store(parentContext, storeSizeFn...)
@@ -107,22 +109,22 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 		err = fmt.Errorf("(store manifest failed) upload failed 4: %w", err)
 		return
 	}
-	bl.Logger.Debug("bzz upload file: manifest reference", manifestReference.String())
+	bl.logger.Debug("bzz upload file:", "manifest reference", manifestReference.String())
 
 	err = putter.Done(manifestReference)
 	if err != nil {
 		err = fmt.Errorf("(done split) upload failed 5: %w", err)
 		return
 	}
-	bl.Logger.Debug("bzz upload file finished")
 	reference = manifestReference
 
 	return
 }
 
 func (bl *Beelite) GetBzz(parentContext context.Context, address swarm.Address) (io.Reader, string, error) {
+	// TODO: add cache option
 	cache := true
-	ls := loadsave.NewReadonly(bl.Storer.Download(cache))
+	ls := loadsave.NewReadonly(bl.storer.Download(cache))
 	feedDereferenced := false
 
 	ctx := parentContext
@@ -134,7 +136,7 @@ FETCH:
 		ls,
 	)
 	if err != nil {
-		bl.Logger.Error(err, "bzz download: not manifest", "address", address)
+		bl.logger.Error(err, "bzz download: not manifest", "address", address)
 		return nil, "", err
 	}
 
@@ -147,23 +149,23 @@ FETCH:
 			//we have a feed manifest here
 			ch, cur, _, err := l.At(ctx, time.Now().Unix(), 0)
 			if err != nil {
-				bl.Logger.Error(err, "bzz download: feed lookup failed")
+				bl.logger.Error(err, "bzz download: feed lookup failed")
 				return nil, "", err
 			}
 			if ch == nil {
-				bl.Logger.Error(err, "bzz download: feed lookup")
+				bl.logger.Error(err, "bzz download: feed lookup")
 				return nil, "", err
 			}
 			ref, _, err := parseFeedUpdate(ch)
 			if err != nil {
-				bl.Logger.Error(err, "bzz download: mapStructure feed update failed")
+				bl.logger.Error(err, "bzz download: mapStructure feed update failed")
 				return nil, "", err
 			}
 			address = ref
 			feedDereferenced = true
 			curBytes, err := cur.MarshalBinary()
 			if err != nil {
-				bl.Logger.Error(err, "bzz download: marshal index failed")
+				bl.logger.Error(err, "bzz download: marshal index failed")
 				return nil, "", err
 			}
 			_ = curBytes
@@ -176,18 +178,18 @@ FETCH:
 		indexDocumentManifestEntry, err := m.Lookup(ctx, pathWithIndex)
 		if err == nil {
 			// index document exists
-			bl.Logger.Debug("bzz download: serving path: %s", pathWithIndex)
+			bl.logger.Debug("bzz download: serving path: %s", pathWithIndex)
 			mtdt := indexDocumentManifestEntry.Metadata()
 			fname, ok := mtdt[manifest.EntryMetadataFilenameKey]
 			if ok {
 				fname = filepath.Base(fname) // only keep the file name
 			}
 			// TODO: update when v2.0.0.0-rc.1 is available
-			// reader, _, err := joiner.New(ctx, bl.Storer.Download(cache), bl.Storer.Cache(), indexDocumentManifestEntry.Reference())
-			reader, _, err := joiner.New(ctx, bl.Storer.Download(cache), indexDocumentManifestEntry.Reference())
+			// reader, _, err := joiner.New(ctx, bl.storer.Download(cache), bl.storer.Cache(), indexDocumentManifestEntry.Reference())
+			reader, _, err := joiner.New(ctx, bl.storer.Download(cache), indexDocumentManifestEntry.Reference())
 			if err != nil {
 				if errors.Is(err, storage.ErrNotFound) {
-					return nil, "", fmt.Errorf("api download: not found : %s", err.Error())
+					return nil, "", fmt.Errorf("api download: not found : %w", err)
 				}
 				return nil, "", fmt.Errorf("unexpected error: %s: %v", indexDocumentManifestEntry.Reference(), err)
 			}
@@ -233,7 +235,7 @@ func (bl *Beelite) manifestFeed(
 		return nil, fmt.Errorf("node lookup: %s", "feed metadata absent")
 	}
 	f := feeds.New(topic, common.BytesToAddress(owner))
-	return bl.FeedFactory.NewLookup(*t, f)
+	return bl.feedFactory.NewLookup(*t, f)
 }
 
 func parseFeedUpdate(ch swarm.Chunk) (swarm.Address, int64, error) {

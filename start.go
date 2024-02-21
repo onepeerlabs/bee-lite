@@ -264,9 +264,9 @@ func Start(lo *LiteOptions, password string, verbosity string) (bl *Beelite, err
 	}()
 
 	defer func() {
-		if errMain != nil && bl != nil && bl.Bee != nil {
+		if errMain != nil && bl != nil && bl.bee != nil {
 			beelogger.Info("shutting down...")
-			err := bl.Bee.Shutdown()
+			err := bl.bee.Shutdown()
 			if err != nil {
 				beelogger.Error(err, "shutdown failed")
 			}
@@ -284,7 +284,7 @@ func Start(lo *LiteOptions, password string, verbosity string) (bl *Beelite, err
 		}
 
 		bl = resp.beelite
-		bl.Bee = resp.beelite.Bee
+		bl.bee = resp.beelite.bee
 		beelogger.Info("bee node built")
 	case <-ctx.Done():
 		beelogger.Info("ctx done")
