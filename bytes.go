@@ -13,6 +13,7 @@ import (
 )
 
 func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encrypt bool, reader io.Reader) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -58,7 +59,8 @@ func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encr
 
 	err = putter.Done(reference)
 	if err != nil {
-		err = fmt.Errorf("(done split) upload failed 2: %w", err)
+		bl.logger.Error(err, "done split failed")
+		err = errors.Join(fmt.Errorf("(done split) upload failed 2: %w", err), putter.Cleanup())
 		return
 	}
 	return

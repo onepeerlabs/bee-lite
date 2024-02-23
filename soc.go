@@ -25,6 +25,7 @@ func (bl *Beelite) AddSOC(ctx context.Context,
 	owner []byte,
 	sig []byte,
 ) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -62,14 +63,14 @@ func (bl *Beelite) AddSOC(ctx context.Context,
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		bl.logger.Error(err, "soc upload: read chunk data failed")
-		return swarm.ZeroAddress, err
+		return
 
 	}
 
 	if len(data) < swarm.SpanSize {
 		err = errors.New("chunk data too short")
 		bl.logger.Error(err, "soc upload: chunk data too short")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	if len(data) > swarm.ChunkSize+swarm.SpanSize {
@@ -81,19 +82,19 @@ func (bl *Beelite) AddSOC(ctx context.Context,
 	chunk, err := cac.NewWithDataSpan(data)
 	if err != nil {
 		bl.logger.Error(err, "soc upload: create content addressed chunk failed")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	ss, err := soc.NewSigned(id, chunk, owner, sig)
 	if err != nil {
 		bl.logger.Error(err, "create soc failed", "id", id, "owner", owner, "error", err)
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	sch, err := ss.Chunk()
 	if err != nil {
 		bl.logger.Error(err, "read chunk data failed", "error")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	if !soc.Valid(sch) {
@@ -104,13 +105,14 @@ func (bl *Beelite) AddSOC(ctx context.Context,
 	err = putter.Put(ctx, sch)
 	if err != nil {
 		bl.logger.Error(err, "soc upload: write chunk failed", "chunk_address", chunk.Address())
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	err = putter.Done(sch.Address())
 	if err != nil {
 		bl.logger.Error(err, "done split failed")
-		return swarm.ZeroAddress, err
+		err = errors.Join(fmt.Errorf("done split failed: %w", err), putter.Cleanup())
+		return
 	}
 
 	reference = sch.Address()

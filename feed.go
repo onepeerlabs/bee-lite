@@ -3,6 +3,7 @@ package beelite
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 
@@ -31,24 +32,25 @@ func requestPipelineFactory(ctx context.Context, s storage.Putter, encrypt bool 
 }
 
 func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, encrypt bool) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	ownerB, err := hex.DecodeString(owner)
 	if err != nil {
 		bl.logger.Debug("feed put: decode owner: %v", err)
-		return swarm.ZeroAddress, err
+		return
 	}
 	topicB, err := hex.DecodeString(topic)
 	if err != nil {
 		bl.logger.Debug("feed put: decode topic: %v", err)
-		return swarm.ZeroAddress, err
+		return
 	}
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
-		return swarm.ZeroAddress, err
+		return
 	}
 	batch, err := hex.DecodeString(batchHex)
 	if err != nil {
 		err = fmt.Errorf("invalid postage batch")
-		return swarm.ZeroAddress, err
+		return
 	}
 	var (
 		tag      uint64
@@ -60,7 +62,7 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 		tag, err = bl.getOrCreateSessionID(uint64(0))
 		if err != nil {
 			bl.logger.Error(err, "get or create tag failed")
-			return swarm.ZeroAddress, err
+			return
 		}
 	}
 	putter, err := bl.newStamperPutter(ctx, putterOptions{
@@ -71,7 +73,7 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 	})
 	if err != nil {
 		bl.logger.Error(err, "get putter failed")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	factory := requestPipelineFactory(ctx, putter, encrypt /*, 0*/)
@@ -79,7 +81,7 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 	feedManifest, err := manifest.NewDefaultManifest(l, encrypt)
 	if err != nil {
 		bl.logger.Debug("feed put: create manifest failed: %v", err)
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	meta := map[string]string{
@@ -93,18 +95,19 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 	err = feedManifest.Add(ctx, "/", manifest.NewEntry(swarm.NewAddress(emptyAddr), meta))
 	if err != nil {
 		bl.logger.Debug("feed post: add manifest entry failed: %v", err)
-		return swarm.ZeroAddress, err
+		return
 	}
 	reference, err = feedManifest.Store(ctx)
 	if err != nil {
 		bl.logger.Debug("feed post: store manifest failed: %v", err)
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	err = putter.Done(reference)
 	if err != nil {
 		bl.logger.Error(err, "done split failed")
-		return swarm.ZeroAddress, err
+		err = errors.Join(fmt.Errorf("done split failed: %w", err), putter.Cleanup())
+		return
 	}
 
 	return

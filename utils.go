@@ -155,7 +155,6 @@ var (
 	errUnsupportedDevNodeOperation = errors.New("operation not supported in dev mode")
 )
 
-// TODO: use Cleanup method for PutterSessions
 func (p *putterSessionWrapper) Cleanup() error {
 	return errors.Join(p.PutterSession.Cleanup(), p.save())
 }

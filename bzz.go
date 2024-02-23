@@ -30,6 +30,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 	encrypt bool,
 	reader io.Reader,
 ) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -113,7 +114,8 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 
 	err = putter.Done(manifestReference)
 	if err != nil {
-		err = fmt.Errorf("(done split) upload failed 5: %w", err)
+		bl.logger.Error(err, "done split failed")
+		err = errors.Join(fmt.Errorf("(done split) upload failed 5: %w", err), putter.Cleanup())
 		return
 	}
 	reference = manifestReference

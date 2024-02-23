@@ -28,11 +28,12 @@ func (bl *Beelite) GetChunk(parentContext context.Context, reference swarm.Addre
 	return chunk, nil
 }
 
-func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, reader io.Reader, swarmTag uint64) (swarm.Address, error) {
+func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, reader io.Reader, swarmTag uint64) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	batch, err := hex.DecodeString(batchHex)
 	if err != nil {
 		err = fmt.Errorf("invalid postage batch")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	var (
@@ -43,7 +44,7 @@ func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, read
 		tag, err = bl.getOrCreateSessionID(swarmTag)
 		if err != nil {
 			bl.logger.Error(err, "get or create tag failed")
-			return swarm.ZeroAddress, err
+			return
 		}
 	}
 	deferred := tag != 0
@@ -54,38 +55,41 @@ func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, read
 	})
 	if err != nil {
 		bl.logger.Error(err, "get putter failed")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		bl.logger.Error(err, "chunk upload: read chunk data failed")
-		return swarm.ZeroAddress, err
+		return
 
 	}
 
 	if len(data) < swarm.SpanSize {
 		err = errors.New("insufficient data length")
 		bl.logger.Error(err, "chunk upload: insufficient data length")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	chunk, err := cac.NewWithDataSpan(data)
 	if err != nil {
 		bl.logger.Error(err, "chunk upload: create chunk error")
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	err = putter.Put(parentContext, chunk)
 	if err != nil {
 		bl.logger.Error(err, "chunk upload: write chunk failed", "chunk_address", chunk.Address())
-		return swarm.ZeroAddress, err
+		return
 	}
 
 	err = putter.Done(chunk.Address())
 	if err != nil {
 		bl.logger.Error(err, "done split failed")
-		return swarm.ZeroAddress, err
+		err = errors.Join(fmt.Errorf("done split failed: %w", err), putter.Cleanup())
+		return
 	}
-	return chunk.Address(), nil
+
+	reference = chunk.Address()
+	return
 }

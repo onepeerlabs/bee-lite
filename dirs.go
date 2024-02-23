@@ -43,6 +43,7 @@ func (bl *Beelite) AddDirBzz(
 	encrypt bool,
 	reader io.Reader,
 ) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		err = fmt.Errorf("content type parse failed: %w", err)
@@ -112,7 +113,8 @@ func (bl *Beelite) AddDirBzz(
 
 	err = putter.Done(reference)
 	if err != nil {
-		err = fmt.Errorf("store dir failed 2: %w", err)
+		bl.logger.Error(err, "store dir failed")
+		err = errors.Join(fmt.Errorf("store dir failed 2: %w", err), putter.Cleanup())
 		return
 	}
 
