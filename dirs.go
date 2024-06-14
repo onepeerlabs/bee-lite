@@ -14,11 +14,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ethersphere/bee/pkg/file/loadsave"
-	"github.com/ethersphere/bee/pkg/log"
-	"github.com/ethersphere/bee/pkg/manifest"
-	storage "github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/file/loadsave"
+	"github.com/ethersphere/bee/v2/pkg/file/redundancy"
+	"github.com/ethersphere/bee/v2/pkg/log"
+	"github.com/ethersphere/bee/v2/pkg/manifest"
+	storage "github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
 var (
@@ -41,6 +42,7 @@ func (bl *Beelite) AddDirBzz(
 	indexFilename,
 	errorFilename string,
 	encrypt bool,
+	rLevel redundancy.Level,
 	reader io.Reader,
 ) (reference swarm.Address, err error) {
 	reference = swarm.ZeroAddress
@@ -104,7 +106,7 @@ func (bl *Beelite) AddDirBzz(
 		bl.storer.ChunkStore(),
 		indexFilename,
 		errorFilename,
-		// rLevel,
+		rLevel,
 	)
 	if err != nil {
 		err = fmt.Errorf("store dir failed 1: %w", err)
@@ -131,11 +133,11 @@ func (bl *Beelite) storeDir(
 	getter storage.Getter,
 	indexFilename,
 	errorFilename string,
-	// rLevel redundancy.Level,
+	rLevel redundancy.Level,
 ) (swarm.Address, error) {
-	p := requestPipelineFn(putter, encrypt /*, rLevel*/)
-	factory := requestPipelineFactory(ctx, putter, encrypt /*, rLevel*/)
-	ls := loadsave.New(getter /*, putter*/, factory)
+	p := requestPipelineFn(putter, encrypt, rLevel)
+	factory := requestPipelineFactory(ctx, putter, encrypt, rLevel)
+	ls := loadsave.New(getter, putter, factory)
 
 	dirManifest, err := manifest.NewDefaultManifest(ls, encrypt)
 	if err != nil {

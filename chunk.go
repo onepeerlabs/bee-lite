@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ethersphere/bee/pkg/cac"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/cac"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
 func (bl *Beelite) GetChunk(parentContext context.Context, reference swarm.Address) (swarm.Chunk, error) {
-	// TODO: add cache option
 	cache := true
 	chunk, err := bl.storer.Download(cache).Get(parentContext, reference)
 	if err != nil {

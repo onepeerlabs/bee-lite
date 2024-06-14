@@ -7,31 +7,32 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ethersphere/bee/pkg/feeds"
-	"github.com/ethersphere/bee/pkg/file/loadsave"
-	"github.com/ethersphere/bee/pkg/file/pipeline"
-	"github.com/ethersphere/bee/pkg/file/pipeline/builder"
-	"github.com/ethersphere/bee/pkg/manifest"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/feeds"
+	"github.com/ethersphere/bee/v2/pkg/file/loadsave"
+	"github.com/ethersphere/bee/v2/pkg/file/pipeline"
+	"github.com/ethersphere/bee/v2/pkg/file/pipeline/builder"
+	"github.com/ethersphere/bee/v2/pkg/file/redundancy"
+	"github.com/ethersphere/bee/v2/pkg/manifest"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
 type pipelineFunc func(context.Context, io.Reader) (swarm.Address, error)
 
-func requestPipelineFn(s storage.Putter, encrypt bool /*, rLevel redundancy.Level*/) pipelineFunc {
+func requestPipelineFn(s storage.Putter, encrypt bool, rLevel redundancy.Level) pipelineFunc {
 	return func(ctx context.Context, r io.Reader) (swarm.Address, error) {
-		pipe := builder.NewPipelineBuilder(ctx, s, encrypt /*, rLevel*/)
+		pipe := builder.NewPipelineBuilder(ctx, s, encrypt, rLevel)
 		return builder.FeedPipeline(ctx, pipe, r)
 	}
 }
 
-func requestPipelineFactory(ctx context.Context, s storage.Putter, encrypt bool /*, rLevel redundancy.Level*/) func() pipeline.Interface {
+func requestPipelineFactory(ctx context.Context, s storage.Putter, encrypt bool, rLevel redundancy.Level) func() pipeline.Interface {
 	return func() pipeline.Interface {
-		return builder.NewPipelineBuilder(ctx, s, encrypt /*, rLevel*/)
+		return builder.NewPipelineBuilder(ctx, s, encrypt, rLevel)
 	}
 }
 
-func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, encrypt bool) (reference swarm.Address, err error) {
+func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, encrypt bool, rLevel redundancy.Level) (reference swarm.Address, err error) {
 	reference = swarm.ZeroAddress
 	ownerB, err := hex.DecodeString(owner)
 	if err != nil {
@@ -76,8 +77,8 @@ func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, e
 		return
 	}
 
-	factory := requestPipelineFactory(ctx, putter, encrypt /*, 0*/)
-	l := loadsave.New(bl.storer.ChunkStore() /*, bl.storer.Cache()*/, factory)
+	factory := requestPipelineFactory(ctx, putter, encrypt, rLevel)
+	l := loadsave.New(bl.storer.ChunkStore(), bl.storer.Cache(), factory)
 	feedManifest, err := manifest.NewDefaultManifest(l, encrypt)
 	if err != nil {
 		bl.logger.Debug("feed put: create manifest failed: %v", err)

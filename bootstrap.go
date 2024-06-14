@@ -16,33 +16,32 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethersphere/bee/pkg/accounting"
-	"github.com/ethersphere/bee/pkg/addressbook"
-	"github.com/ethersphere/bee/pkg/crypto"
-	"github.com/ethersphere/bee/pkg/feeds"
-	"github.com/ethersphere/bee/pkg/feeds/factory"
-	"github.com/ethersphere/bee/pkg/file"
-	"github.com/ethersphere/bee/pkg/file/joiner"
-	"github.com/ethersphere/bee/pkg/file/loadsave"
-	"github.com/ethersphere/bee/pkg/hive"
-	"github.com/ethersphere/bee/pkg/log"
-	"github.com/ethersphere/bee/pkg/manifest"
-	"github.com/ethersphere/bee/pkg/p2p/libp2p"
-	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/pricer"
-	"github.com/ethersphere/bee/pkg/pricing"
-	"github.com/ethersphere/bee/pkg/retrieval"
-	"github.com/ethersphere/bee/pkg/settlement/pseudosettle"
-	"github.com/ethersphere/bee/pkg/settlement/swap/chequebook"
-	"github.com/ethersphere/bee/pkg/spinlock"
-	"github.com/ethersphere/bee/pkg/storage"
-	storer "github.com/ethersphere/bee/pkg/storer"
-	"github.com/ethersphere/bee/pkg/swarm"
-	"github.com/ethersphere/bee/pkg/topology"
-	"github.com/ethersphere/bee/pkg/topology/kademlia"
-	"github.com/ethersphere/bee/pkg/topology/lightnode"
-	"github.com/ethersphere/bee/pkg/tracing"
-	"github.com/ethersphere/bee/pkg/transaction"
+	"github.com/ethersphere/bee/v2/pkg/accounting"
+	"github.com/ethersphere/bee/v2/pkg/addressbook"
+	"github.com/ethersphere/bee/v2/pkg/crypto"
+	"github.com/ethersphere/bee/v2/pkg/feeds"
+	"github.com/ethersphere/bee/v2/pkg/feeds/factory"
+	"github.com/ethersphere/bee/v2/pkg/file"
+	"github.com/ethersphere/bee/v2/pkg/file/joiner"
+	"github.com/ethersphere/bee/v2/pkg/file/loadsave"
+	"github.com/ethersphere/bee/v2/pkg/hive"
+	"github.com/ethersphere/bee/v2/pkg/log"
+	"github.com/ethersphere/bee/v2/pkg/manifest"
+	"github.com/ethersphere/bee/v2/pkg/node"
+	"github.com/ethersphere/bee/v2/pkg/p2p/libp2p"
+	"github.com/ethersphere/bee/v2/pkg/postage"
+	"github.com/ethersphere/bee/v2/pkg/pricer"
+	"github.com/ethersphere/bee/v2/pkg/pricing"
+	"github.com/ethersphere/bee/v2/pkg/retrieval"
+	"github.com/ethersphere/bee/v2/pkg/settlement/pseudosettle"
+	"github.com/ethersphere/bee/v2/pkg/spinlock"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	storer "github.com/ethersphere/bee/v2/pkg/storer"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/topology"
+	"github.com/ethersphere/bee/v2/pkg/topology/kademlia"
+	"github.com/ethersphere/bee/v2/pkg/topology/lightnode"
+	"github.com/ethersphere/bee/v2/pkg/tracing"
 	"github.com/hashicorp/go-multierror"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -50,9 +49,7 @@ import (
 var (
 	// zeroed out while waiting to be  replacement for the new snapshot feed address
 	// must be different to avoid stale reads on the old contract
-	// snapshotFeed    = swarm.MustParseHexAddress("0000000000000000000000000000000000000000000000000000000000000000")
-	// copied from old bee-lite/utils.go
-	snapshotFeed    = swarm.MustParseHexAddress("b181b084df07a550c9fc0007110bff67000fa92a090af6c5212fe8e19f888a28")
+	snapshotFeed    = swarm.MustParseHexAddress("0000000000000000000000000000000000000000000000000000000000000000")
 	errDataMismatch = errors.New("data length mismatch")
 )
 
@@ -67,21 +64,15 @@ func bootstrapNode(
 	addr string,
 	swarmAddress swarm.Address,
 	nonce []byte,
-	chainID int64,
-	overlayEthAddress common.Address,
 	addressbook addressbook.Interface,
 	bootnodes []ma.Multiaddr,
 	lightNodes *lightnode.Container,
-	chequebookService chequebook.Service,
-	chequeStore chequebook.ChequeStore,
-	cashoutService chequebook.CashoutService,
-	transactionService transaction.Service,
 	stateStore storage.StateStorer,
 	signer crypto.Signer,
 	networkID uint64,
 	logger log.Logger,
 	libp2pPrivateKey *ecdsa.PrivateKey,
-	o *Options,
+	o *node.Options,
 ) (snapshot *postage.ChainSnapshot, retErr error) {
 
 	tracer, tracerCloser, err := tracing.NewTracer(&tracing.Options{
@@ -239,9 +230,7 @@ func bootstrapNode(
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		// TODO: update when v2.0.0.0-rc.1 is available
-		// reader, l, err = joiner.New(ctx, localStore.Download(true), localStore.Cache(), snapshotReference)
-		reader, l, err = joiner.New(ctx, localStore.Download(true), snapshotReference)
+		reader, l, err = joiner.New(ctx, localStore.Download(true), localStore.Cache(), snapshotReference)
 		if err != nil {
 			logger.Warning("bootstrap: file joiner failed", "error", err)
 			continue

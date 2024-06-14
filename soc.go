@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ethersphere/bee/pkg/cac"
-	"github.com/ethersphere/bee/pkg/soc"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/cac"
+	"github.com/ethersphere/bee/v2/pkg/soc"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
 const (
@@ -40,7 +40,6 @@ func (bl *Beelite) AddSOC(ctx context.Context,
 		pin = false
 	)
 
-	// TODO: add deferred and pinning options
 	// if pinning header is set we do a deferred upload, else we do a direct upload
 	if pin {
 		tag, err = bl.getOrCreateSessionID(uint64(0))

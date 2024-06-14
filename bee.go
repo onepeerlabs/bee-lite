@@ -17,57 +17,57 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethersphere/bee/pkg/accounting"
-	"github.com/ethersphere/bee/pkg/addressbook"
-	"github.com/ethersphere/bee/pkg/api"
-	"github.com/ethersphere/bee/pkg/auth"
-	"github.com/ethersphere/bee/pkg/config"
-	"github.com/ethersphere/bee/pkg/crypto"
-	"github.com/ethersphere/bee/pkg/feeds/factory"
-	"github.com/ethersphere/bee/pkg/hive"
-	"github.com/ethersphere/bee/pkg/log"
-	"github.com/ethersphere/bee/pkg/metrics"
-	"github.com/ethersphere/bee/pkg/node"
-	"github.com/ethersphere/bee/pkg/p2p"
-	"github.com/ethersphere/bee/pkg/p2p/libp2p"
-	"github.com/ethersphere/bee/pkg/pingpong"
-	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/postage/batchservice"
-	"github.com/ethersphere/bee/pkg/postage/batchstore"
-	"github.com/ethersphere/bee/pkg/postage/listener"
-	"github.com/ethersphere/bee/pkg/postage/postagecontract"
-	"github.com/ethersphere/bee/pkg/pricer"
-	"github.com/ethersphere/bee/pkg/pricing"
-	"github.com/ethersphere/bee/pkg/pss"
-	"github.com/ethersphere/bee/pkg/puller"
-	"github.com/ethersphere/bee/pkg/pullsync"
-	"github.com/ethersphere/bee/pkg/pusher"
-	"github.com/ethersphere/bee/pkg/pushsync"
-	"github.com/ethersphere/bee/pkg/resolver/multiresolver"
-	"github.com/ethersphere/bee/pkg/retrieval"
-	"github.com/ethersphere/bee/pkg/salud"
-	"github.com/ethersphere/bee/pkg/settlement/pseudosettle"
-	"github.com/ethersphere/bee/pkg/settlement/swap"
-	"github.com/ethersphere/bee/pkg/settlement/swap/chequebook"
-	"github.com/ethersphere/bee/pkg/settlement/swap/erc20"
-	"github.com/ethersphere/bee/pkg/settlement/swap/priceoracle"
-	"github.com/ethersphere/bee/pkg/status"
-	"github.com/ethersphere/bee/pkg/steward"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/storageincentives"
-	"github.com/ethersphere/bee/pkg/storageincentives/redistribution"
-	"github.com/ethersphere/bee/pkg/storageincentives/staking"
-	storer "github.com/ethersphere/bee/pkg/storer"
-	"github.com/ethersphere/bee/pkg/swarm"
-	"github.com/ethersphere/bee/pkg/topology"
-	"github.com/ethersphere/bee/pkg/topology/kademlia"
-	"github.com/ethersphere/bee/pkg/topology/lightnode"
-	"github.com/ethersphere/bee/pkg/tracing"
-	"github.com/ethersphere/bee/pkg/transaction"
-	"github.com/ethersphere/bee/pkg/util/abiutil"
-	"github.com/ethersphere/bee/pkg/util/ioutil"
-	"github.com/ethersphere/bee/pkg/util/nbhdutil"
-	"github.com/ethersphere/bee/pkg/util/syncutil"
+	"github.com/ethersphere/bee/v2/pkg/accounting"
+	"github.com/ethersphere/bee/v2/pkg/addressbook"
+	"github.com/ethersphere/bee/v2/pkg/api"
+	"github.com/ethersphere/bee/v2/pkg/auth"
+	"github.com/ethersphere/bee/v2/pkg/config"
+	"github.com/ethersphere/bee/v2/pkg/crypto"
+	"github.com/ethersphere/bee/v2/pkg/feeds/factory"
+	"github.com/ethersphere/bee/v2/pkg/hive"
+	"github.com/ethersphere/bee/v2/pkg/log"
+	"github.com/ethersphere/bee/v2/pkg/metrics"
+	"github.com/ethersphere/bee/v2/pkg/node"
+	"github.com/ethersphere/bee/v2/pkg/p2p"
+	"github.com/ethersphere/bee/v2/pkg/p2p/libp2p"
+	"github.com/ethersphere/bee/v2/pkg/pingpong"
+	"github.com/ethersphere/bee/v2/pkg/postage"
+	"github.com/ethersphere/bee/v2/pkg/postage/batchservice"
+	"github.com/ethersphere/bee/v2/pkg/postage/batchstore"
+	"github.com/ethersphere/bee/v2/pkg/postage/listener"
+	"github.com/ethersphere/bee/v2/pkg/postage/postagecontract"
+	"github.com/ethersphere/bee/v2/pkg/pricer"
+	"github.com/ethersphere/bee/v2/pkg/pricing"
+	"github.com/ethersphere/bee/v2/pkg/pss"
+	"github.com/ethersphere/bee/v2/pkg/puller"
+	"github.com/ethersphere/bee/v2/pkg/pullsync"
+	"github.com/ethersphere/bee/v2/pkg/pusher"
+	"github.com/ethersphere/bee/v2/pkg/pushsync"
+	"github.com/ethersphere/bee/v2/pkg/resolver/multiresolver"
+	"github.com/ethersphere/bee/v2/pkg/retrieval"
+	"github.com/ethersphere/bee/v2/pkg/salud"
+	"github.com/ethersphere/bee/v2/pkg/settlement/pseudosettle"
+	"github.com/ethersphere/bee/v2/pkg/settlement/swap"
+	"github.com/ethersphere/bee/v2/pkg/settlement/swap/chequebook"
+	"github.com/ethersphere/bee/v2/pkg/settlement/swap/erc20"
+	"github.com/ethersphere/bee/v2/pkg/settlement/swap/priceoracle"
+	"github.com/ethersphere/bee/v2/pkg/status"
+	"github.com/ethersphere/bee/v2/pkg/steward"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/storageincentives"
+	"github.com/ethersphere/bee/v2/pkg/storageincentives/redistribution"
+	"github.com/ethersphere/bee/v2/pkg/storageincentives/staking"
+	storer "github.com/ethersphere/bee/v2/pkg/storer"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/topology"
+	"github.com/ethersphere/bee/v2/pkg/topology/kademlia"
+	"github.com/ethersphere/bee/v2/pkg/topology/lightnode"
+	"github.com/ethersphere/bee/v2/pkg/tracing"
+	"github.com/ethersphere/bee/v2/pkg/transaction"
+	"github.com/ethersphere/bee/v2/pkg/util/abiutil"
+	"github.com/ethersphere/bee/v2/pkg/util/ioutil"
+	"github.com/ethersphere/bee/v2/pkg/util/nbhdutil"
+	"github.com/ethersphere/bee/v2/pkg/util/syncutil"
 	"github.com/hashicorp/go-multierror"
 	ma "github.com/multiformats/go-multiaddr"
 	promc "github.com/prometheus/client_golang/prometheus"
@@ -111,61 +111,6 @@ type Bee struct {
 	syncingStopped           *syncutil.Signaler
 }
 
-type Options struct {
-	DataDir                       string
-	CacheCapacity                 uint64
-	DBOpenFilesLimit              uint64
-	DBWriteBufferSize             uint64
-	DBBlockCacheCapacity          uint64
-	DBDisableSeeksCompaction      bool
-	APIAddr                       string
-	DebugAPIAddr                  string
-	Addr                          string
-	NATAddr                       string
-	EnableWS                      bool
-	WelcomeMessage                string
-	Bootnodes                     []string
-	CORSAllowedOrigins            []string
-	Logger                        log.Logger
-	TracingEnabled                bool
-	TracingEndpoint               string
-	TracingServiceName            string
-	PaymentThreshold              string
-	PaymentTolerance              int64
-	PaymentEarly                  int64
-	ResolverConnectionCfgs        []multiresolver.ConnectionConfig
-	RetrievalCaching              bool
-	BootnodeMode                  bool
-	BlockchainRpcEndpoint         string
-	SwapFactoryAddress            string
-	SwapLegacyFactoryAddresses    []string
-	SwapInitialDeposit            string
-	SwapEnable                    bool
-	ChequebookEnable              bool
-	FullNodeMode                  bool
-	PostageContractAddress        string
-	PostageContractStartBlock     uint64
-	StakingContractAddress        string
-	PriceOracleAddress            string
-	RedistributionContractAddress string
-	BlockTime                     time.Duration
-	DeployGasPrice                string
-	WarmupTime                    time.Duration
-	ChainID                       int64
-	Resync                        bool
-	BlockProfile                  bool
-	MutexProfile                  bool
-	StaticNodes                   []swarm.Address
-	AllowPrivateCIDRs             bool
-	Restricted                    bool
-	TokenEncryptionKey            string
-	AdminPasswordHash             string
-	UsePostageSnapshot            bool
-	EnableStorageIncentives       bool
-	StatestoreCacheCapacity       uint64
-	TargetNeighborhood            string
-}
-
 const (
 	refreshRate                   = int64(4500000)            // accounting units refreshed per second
 	lightFactor                   = 10                        // downscale payment thresholds and their change rate, and refresh rates by this for light nodes
@@ -183,6 +128,8 @@ const (
 	maxDelay                      = 1 * time.Minute
 	cancellationDepth             = 12
 	additionalConfirmations       = 2
+	reserveMinEvictCount          = 1_000
+	cacheMinEvictCount            = 10_000
 )
 
 func initChequeStoreCashout(
@@ -221,7 +168,7 @@ func NewBee(
 	logger log.Logger,
 	libp2pPrivateKey,
 	pssPrivateKey *ecdsa.PrivateKey,
-	o *Options,
+	o *node.Options,
 ) (bl *Beelite, err error) {
 	tracer, tracerCloser, err := tracing.NewTracer(&tracing.Options{
 		Enabled:     o.TracingEnabled,
@@ -275,7 +222,7 @@ func NewBee(
 	}
 	b.stateStoreCloser = stateStore
 
-	// Check if the the batchstore exists. If not, we can assume it's missing
+	// Check if the batchstore exists. If not, we can assume it's missing
 	// due to a migration or it's a fresh install.
 	batchStoreExists, err := batchStoreExists(stateStore)
 	if err != nil {
@@ -305,9 +252,18 @@ func NewBee(
 
 	if !nonceExists {
 		// mine the overlay
-		if o.TargetNeighborhood != "" {
-			logger.Info("mining an overlay address for the fresh node to target the selected neighborhood", "target", o.TargetNeighborhood)
-			swarmAddress, nonce, err = nbhdutil.MineOverlay(ctx, *pubKey, networkID, o.TargetNeighborhood)
+		targetNeighborhood := o.TargetNeighborhood
+		if o.TargetNeighborhood == "" && o.NeighborhoodSuggester != "" {
+			logger.Info("fetching target neighborhood from suggester", "url", o.NeighborhoodSuggester)
+			targetNeighborhood, err = nbhdutil.FetchNeighborhood(&http.Client{}, o.NeighborhoodSuggester)
+			if err != nil {
+				return nil, fmt.Errorf("neighborhood suggestion: %w", err)
+			}
+		}
+
+		if targetNeighborhood != "" {
+			logger.Info("mining an overlay address for the fresh node to target the selected neighborhood", "target", targetNeighborhood)
+			swarmAddress, nonce, err = nbhdutil.MineOverlay(ctx, *pubKey, networkID, targetNeighborhood)
 			if err != nil {
 				return nil, fmt.Errorf("mine overlay address: %w", err)
 			}
@@ -414,6 +370,7 @@ func NewBee(
 	}
 	b.stamperStoreCloser = stamperStore
 
+	var apiService *api.Service
 	var debugService *api.Service
 
 	if o.DebugAPIAddr != "" {
@@ -434,6 +391,7 @@ func NewBee(
 			*publicKey,
 			pssPrivateKey.PublicKey,
 			overlayEthAddress,
+			o.WhitelistedWithdrawalAddress,
 			logger,
 			transactionService,
 			batchStore,
@@ -444,6 +402,7 @@ func NewBee(
 			o.CORSAllowedOrigins,
 			stamperStore,
 		)
+		debugService.Restricted = o.Restricted
 		debugService.MountTechnicalDebug()
 		debugService.SetProbe(probe)
 
@@ -466,13 +425,24 @@ func NewBee(
 		b.debugAPIServer = debugAPIServer
 	}
 
-	var apiService *api.Service
+	if o.APIAddr != "" {
+		if o.MutexProfile {
+			_ = runtime.SetMutexProfileFraction(1)
+		}
+		if o.BlockProfile {
+			runtime.SetBlockProfileRate(1)
+		}
 
-	if o.Restricted {
+		apiListener, err := net.Listen("tcp", o.APIAddr)
+		if err != nil {
+			return nil, fmt.Errorf("api listener: %w", err)
+		}
+
 		apiService = api.New(
 			*publicKey,
 			pssPrivateKey.PublicKey,
 			overlayEthAddress,
+			o.WhitelistedWithdrawalAddress,
 			logger,
 			transactionService,
 			batchStore,
@@ -483,6 +453,7 @@ func NewBee(
 			o.CORSAllowedOrigins,
 			stamperStore,
 		)
+		apiService.Restricted = o.Restricted
 		apiService.MountTechnicalDebug()
 		apiService.SetProbe(probe)
 
@@ -491,11 +462,6 @@ func NewBee(
 			ReadHeaderTimeout: 3 * time.Second,
 			Handler:           apiService,
 			ErrorLog:          stdlog.New(b.errorLogWriter, "", 0),
-		}
-
-		apiListener, err := net.Listen("tcp", o.APIAddr)
-		if err != nil {
-			return nil, fmt.Errorf("api listener: %w", err)
 		}
 
 		go func() {
@@ -526,20 +492,9 @@ func NewBee(
 	}
 
 	if o.SwapEnable {
-		chequebookFactory, err = node.InitChequebookFactory(
-			logger,
-			chainBackend,
-			chainID,
-			transactionService,
-			o.SwapFactoryAddress,
-			o.SwapLegacyFactoryAddresses,
-		)
+		chequebookFactory, err = node.InitChequebookFactory(logger, chainBackend, chainID, transactionService, o.SwapFactoryAddress)
 		if err != nil {
 			return nil, err
-		}
-
-		if err = chequebookFactory.VerifyBytecode(ctx); err != nil {
-			return nil, fmt.Errorf("factory fail: %w", err)
 		}
 
 		erc20Address, err := chequebookFactory.ERC20Address(ctx)
@@ -578,8 +533,6 @@ func NewBee(
 			transactionService,
 		)
 	}
-
-	apiService.SetSwarmAddress(&swarmAddress)
 
 	lightNodes := lightnode.NewContainer(swarmAddress)
 
@@ -630,15 +583,9 @@ func NewBee(
 			addr,
 			swarmAddress,
 			nonce,
-			chainID,
-			overlayEthAddress,
 			addressbook,
 			bootnodes,
 			lightNodes,
-			chequebookService,
-			chequeStore,
-			cashoutService,
-			transactionService,
 			stateStore,
 			signer,
 			networkID,
@@ -656,6 +603,8 @@ func NewBee(
 
 	if debugService != nil {
 		registry = debugService.MetricsRegistry()
+	} else if apiService != nil {
+		registry = apiService.MetricsRegistry()
 	}
 
 	p2ps, err := libp2p.New(ctx, signer, networkID, swarmAddress, addr, addressbook, stateStore, lightNodes, logger, tracer, libp2p.Options{
@@ -776,12 +725,15 @@ func NewBee(
 		RadiusSetter:              kad,
 		WarmupDuration:            o.WarmupTime,
 		Logger:                    logger,
+		Tracer:                    tracer,
+		CacheMinEvictCount:        cacheMinEvictCount,
 	}
 
 	if o.FullNodeMode && !o.BootnodeMode {
 		// configure reserve only for full node
 		lo.ReserveCapacity = ReserveCapacity
 		lo.ReserveWakeUpDuration = reserveWakeUpDuration
+		lo.ReserveMinEvictCount = reserveMinEvictCount
 		lo.RadiusSetter = kad
 	}
 
@@ -985,7 +937,7 @@ func NewBee(
 	retrieval := retrieval.New(swarmAddress, waitNetworkRFunc, localStore, p2ps, kad, logger, acc, pricer, tracer, o.RetrievalCaching)
 	localStore.SetRetrievalService(retrieval)
 
-	pusherService := pusher.New(networkID, localStore, waitNetworkRFunc, pushSyncProtocol, validStamp, logger, tracer, warmupTime, pusher.DefaultRetryCount)
+	pusherService := pusher.New(networkID, localStore, waitNetworkRFunc, pushSyncProtocol, validStamp, logger, warmupTime, pusher.DefaultRetryCount)
 	b.pusherCloser = pusherService
 
 	pusherService.AddFeed(localStore.PusherFeed())
@@ -1036,7 +988,7 @@ func NewBee(
 	)
 
 	if o.FullNodeMode && !o.BootnodeMode {
-		pullerService = puller.New(stateStore, kad, localStore, pullSyncProtocol, p2ps, logger, puller.Options{})
+		pullerService = puller.New(swarmAddress, stateStore, kad, localStore, pullSyncProtocol, p2ps, logger, puller.Options{})
 		b.pullerCloser = pullerService
 
 		localStore.StartReserveWorker(ctx, pullerService, waitNetworkRFunc)
@@ -1091,9 +1043,7 @@ func NewBee(
 	b.resolverCloser = multiResolver
 
 	feedFactory := factory.New(localStore.Download(true))
-	steward := steward.New(localStore, retrieval)
-	// TODO: update when v2.0.0.0-rc.1 is available
-	// steward := steward.New(localStore, retrieval, localStore.Cache())
+	steward := steward.New(localStore, retrieval, localStore.Cache())
 
 	extraOpts := api.ExtraOptions{
 		Pingpong:        pingPong,
@@ -1114,13 +1064,53 @@ func NewBee(
 		Steward:         steward,
 		SyncStatus:      syncStatusFn,
 		NodeStatus:      nodeStatus,
+		PinIntegrity:    localStore.PinIntegrity(),
 	}
 
 	if o.APIAddr != "" {
-		if apiService == nil {
-			apiService = api.New(*publicKey, pssPrivateKey.PublicKey, overlayEthAddress, logger, transactionService, batchStore, beeNodeMode, o.ChequebookEnable, o.SwapEnable, chainBackend, o.CORSAllowedOrigins, stamperStore)
-			apiService.SetProbe(probe)
-			apiService.SetRedistributionAgent(agent)
+		// register metrics from components
+		apiService.MustRegisterMetrics(p2ps.Metrics()...)
+		apiService.MustRegisterMetrics(pingPong.Metrics()...)
+		apiService.MustRegisterMetrics(acc.Metrics()...)
+		apiService.MustRegisterMetrics(localStore.Metrics()...)
+		apiService.MustRegisterMetrics(kad.Metrics()...)
+		apiService.MustRegisterMetrics(saludService.Metrics()...)
+		apiService.MustRegisterMetrics(stateStoreMetrics.Metrics()...)
+
+		if pullerService != nil {
+			apiService.MustRegisterMetrics(pullerService.Metrics()...)
+		}
+
+		if agent != nil {
+			apiService.MustRegisterMetrics(agent.Metrics()...)
+		}
+
+		apiService.MustRegisterMetrics(pushSyncProtocol.Metrics()...)
+		apiService.MustRegisterMetrics(pusherService.Metrics()...)
+		apiService.MustRegisterMetrics(pullSyncProtocol.Metrics()...)
+		apiService.MustRegisterMetrics(retrieval.Metrics()...)
+		apiService.MustRegisterMetrics(lightNodes.Metrics()...)
+		apiService.MustRegisterMetrics(hive.Metrics()...)
+
+		if bs, ok := batchStore.(metrics.Collector); ok {
+			apiService.MustRegisterMetrics(bs.Metrics()...)
+		}
+		if ls, ok := eventListener.(metrics.Collector); ok {
+			apiService.MustRegisterMetrics(ls.Metrics()...)
+		}
+		if pssServiceMetrics, ok := pssService.(metrics.Collector); ok {
+			apiService.MustRegisterMetrics(pssServiceMetrics.Metrics()...)
+		}
+		if swapBackendMetrics, ok := chainBackend.(metrics.Collector); ok {
+			apiService.MustRegisterMetrics(swapBackendMetrics.Metrics()...)
+		}
+
+		if l, ok := logger.(metrics.Collector); ok {
+			apiService.MustRegisterMetrics(l.Metrics()...)
+		}
+		apiService.MustRegisterMetrics(pseudosettleService.Metrics()...)
+		if swapService != nil {
+			apiService.MustRegisterMetrics(swapService.Metrics()...)
 		}
 
 		apiService.Configure(signer, authenticator, tracer, api.Options{
@@ -1130,34 +1120,10 @@ func NewBee(
 		}, extraOpts, chainID, erc20Service)
 
 		apiService.MountAPI()
+		apiService.MountDebug()
 
-		if !o.Restricted {
-			apiServer := &http.Server{
-				IdleTimeout:       30 * time.Second,
-				ReadHeaderTimeout: 3 * time.Second,
-				Handler:           apiService,
-				ErrorLog:          stdlog.New(b.errorLogWriter, "", 0),
-			}
-
-			apiListener, err := net.Listen("tcp", o.APIAddr)
-			if err != nil {
-				return nil, fmt.Errorf("api listener: %w", err)
-			}
-
-			go func() {
-				logger.Info("starting api server", "address", apiListener.Addr())
-				if err := apiServer.Serve(apiListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					logger.Debug("api server failed to start", "error", err)
-					logger.Error(nil, "api server failed to start")
-				}
-			}()
-
-			b.apiServer = apiServer
-			b.apiCloser = apiService
-		} else {
-			// in Restricted mode we mount debug endpoints
-			apiService.MountDebug(o.Restricted)
-		}
+		apiService.SetSwarmAddress(&swarmAddress)
+		apiService.SetRedistributionAgent(agent)
 	}
 
 	if o.DebugAPIAddr != "" {
@@ -1216,7 +1182,7 @@ func NewBee(
 
 		debugService.SetP2P(p2ps)
 		debugService.SetSwarmAddress(&swarmAddress)
-		debugService.MountDebug(false)
+		debugService.MountDebug()
 		debugService.SetRedistributionAgent(agent)
 	}
 
@@ -1385,7 +1351,7 @@ func (b *Bee) Shutdown() error {
 
 var ErrShutdownInProgress error = errors.New("shutdown in progress")
 
-func isChainEnabled(o *Options, swapEndpoint string, logger log.Logger) bool {
+func isChainEnabled(o *node.Options, swapEndpoint string, logger log.Logger) bool {
 	chainDisabled := swapEndpoint == ""
 	lightMode := !o.FullNodeMode
 

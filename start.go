@@ -12,14 +12,15 @@ import (
 	"syscall"
 	"time"
 
-	chaincfg "github.com/ethersphere/bee/pkg/config"
-	"github.com/ethersphere/bee/pkg/crypto"
-	"github.com/ethersphere/bee/pkg/keystore"
-	filekeystore "github.com/ethersphere/bee/pkg/keystore/file"
-	memkeystore "github.com/ethersphere/bee/pkg/keystore/mem"
-	beelog "github.com/ethersphere/bee/pkg/log"
-	"github.com/ethersphere/bee/pkg/resolver/multiresolver"
-	"github.com/ethersphere/bee/pkg/swarm"
+	chaincfg "github.com/ethersphere/bee/v2/pkg/config"
+	"github.com/ethersphere/bee/v2/pkg/crypto"
+	"github.com/ethersphere/bee/v2/pkg/keystore"
+	filekeystore "github.com/ethersphere/bee/v2/pkg/keystore/file"
+	memkeystore "github.com/ethersphere/bee/v2/pkg/keystore/mem"
+	beelog "github.com/ethersphere/bee/v2/pkg/log"
+	"github.com/ethersphere/bee/v2/pkg/node"
+	"github.com/ethersphere/bee/v2/pkg/resolver/multiresolver"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
 type LiteOptions struct {
@@ -185,7 +186,7 @@ func buildBeeNode(ctx context.Context, lo *LiteOptions, password string, beelogg
 		return nil, errors.New("static nodes can only be configured on bootnodes")
 	}
 
-	beelite, err := NewBee(ctx, ":1634", signerCfg.publicKey, signerCfg.signer, networkID, beelogger, signerCfg.libp2pPrivateKey, signerCfg.pssPrivateKey, &Options{
+	beelite, err := NewBee(ctx, ":1634", signerCfg.publicKey, signerCfg.signer, networkID, beelogger, signerCfg.libp2pPrivateKey, signerCfg.pssPrivateKey, &node.Options{
 		DataDir:                       lo.DataDir,
 		CacheCapacity:                 lo.CacheCapacity,
 		DBOpenFilesLimit:              lo.DBOpenFilesLimit,
@@ -211,7 +212,6 @@ func buildBeeNode(ctx context.Context, lo *LiteOptions, password string, beelogg
 		BootnodeMode:                  bootnodeMode,
 		BlockchainRpcEndpoint:         lo.BlockchainRpcEndpoint,
 		SwapFactoryAddress:            "",
-		SwapLegacyFactoryAddresses:    []string{},
 		SwapInitialDeposit:            lo.SwapInitialDeposit,
 		SwapEnable:                    lo.SwapEnable,
 		ChequebookEnable:              lo.ChequebookEnable,

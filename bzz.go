@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethersphere/bee/pkg/feeds"
-	"github.com/ethersphere/bee/pkg/file/joiner"
-	"github.com/ethersphere/bee/pkg/file/loadsave"
-	"github.com/ethersphere/bee/pkg/manifest"
-	"github.com/ethersphere/bee/pkg/soc"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"github.com/ethersphere/bee/v2/pkg/feeds"
+	"github.com/ethersphere/bee/v2/pkg/file/joiner"
+	"github.com/ethersphere/bee/v2/pkg/file/loadsave"
+	"github.com/ethersphere/bee/v2/pkg/file/redundancy"
+	"github.com/ethersphere/bee/v2/pkg/manifest"
+	"github.com/ethersphere/bee/v2/pkg/soc"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
 var errInvalidFeedUpdate = errors.New("invalid feed update")
@@ -28,6 +29,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 	filename,
 	contentType string,
 	encrypt bool,
+	rLevel redundancy.Level,
 	reader io.Reader,
 ) (reference swarm.Address, err error) {
 	reference = swarm.ZeroAddress
@@ -41,7 +43,6 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 		return
 	}
 
-	// TODO: add deferred and pinning options
 	var (
 		tag      uint64
 		deferred = false
@@ -67,7 +68,7 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 	}
 
 	// first store the file and get its reference
-	p := requestPipelineFn(putter, encrypt /*, 0*/)
+	p := requestPipelineFn(putter, encrypt, rLevel)
 	reference, err = p(parentContext, reader)
 	if err != nil {
 		err = fmt.Errorf("file store failed 0: %w", err)
@@ -77,8 +78,8 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 		filename = reference.String()
 	}
 
-	factory := requestPipelineFactory(parentContext, putter, encrypt /*, 0*/)
-	l := loadsave.New(bl.storer.ChunkStore() /*, bl.storer.Cache()*/, factory)
+	factory := requestPipelineFactory(parentContext, putter, encrypt, rLevel)
+	l := loadsave.New(bl.storer.ChunkStore(), bl.storer.Cache(), factory)
 	m, err := manifest.NewDefaultManifest(l, encrypt)
 	if err != nil {
 		err = fmt.Errorf("(create manifest) upload failed 1: %w", err)
@@ -124,7 +125,6 @@ func (bl *Beelite) AddFileBzz(parentContext context.Context,
 }
 
 func (bl *Beelite) GetBzz(parentContext context.Context, address swarm.Address) (io.Reader, string, error) {
-	// TODO: add cache option
 	cache := true
 	ls := loadsave.NewReadonly(bl.storer.Download(cache))
 	feedDereferenced := false
@@ -186,9 +186,7 @@ FETCH:
 			if ok {
 				fname = filepath.Base(fname) // only keep the file name
 			}
-			// TODO: update when v2.0.0.0-rc.1 is available
-			// reader, _, err := joiner.New(ctx, bl.storer.Download(cache), bl.storer.Cache(), indexDocumentManifestEntry.Reference())
-			reader, _, err := joiner.New(ctx, bl.storer.Download(cache), indexDocumentManifestEntry.Reference())
+			reader, _, err := joiner.New(ctx, bl.storer.Download(cache), bl.storer.Cache(), indexDocumentManifestEntry.Reference())
 			if err != nil {
 				if errors.Is(err, storage.ErrNotFound) {
 					return nil, "", fmt.Errorf("api download: not found : %w", err)

@@ -4,7 +4,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethersphere/bee/pkg/postage"
+	"github.com/ethersphere/bee/v2/pkg/postage"
 )
 
 func (bl *Beelite) GetAllBatches() []*postage.StampIssuer {
