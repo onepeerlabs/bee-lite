@@ -13,7 +13,7 @@ lo := &beelite.LiteOptions {
     Bootnodes:                []string{"/dnsaddr/mainnet.ethswarm.org"},
     StaticNodes:              []string{<STATIC_NODE_ADDRESSES>},
     DataDir:                  dataDir,
-    WelcomeMessage:           "Welcome from bee-lite by Solar Punk",
+    WelcomeMessage:           "Welcome from bee-lite",
     BlockchainRpcEndpoint:    <RPC_ENDPOINT>,
     SwapInitialDeposit:       "10000000000000000",
     PaymentThreshold:         "100000000",
