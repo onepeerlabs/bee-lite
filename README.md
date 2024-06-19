@@ -1,6 +1,6 @@
 # bee-lite
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/Solar-Punk-Ltd/bee-lite.svg)](https://pkg.go.dev/github.com/Solar-Punk-Ltd/bee-lite)
+[![Go Reference](https://pkg.go.dev/badge/github.com/onepeerlabs/bee-lite.svg)](https://pkg.go.dev/github.com/onepeerlabs/bee-lite)
 
 bee-lite is an embeddable, lightweight bee node for applications to use swarm directly
 
