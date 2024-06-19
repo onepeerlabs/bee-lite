@@ -1,2 +1,4 @@
 example/
 .idea
+vendor/
+.vscode

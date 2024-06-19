@@ -1,28 +1,47 @@
-package bee
+package beelite
 
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"github.com/ethersphere/bee/pkg/feeds"
-	"github.com/ethersphere/bee/pkg/file/loadsave"
-	"github.com/ethersphere/bee/pkg/file/pipeline"
-	"github.com/ethersphere/bee/pkg/file/pipeline/builder"
-	"github.com/ethersphere/bee/pkg/manifest"
-	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"io"
+
+	"github.com/ethersphere/bee/v2/pkg/feeds"
+	"github.com/ethersphere/bee/v2/pkg/file/loadsave"
+	"github.com/ethersphere/bee/v2/pkg/file/pipeline"
+	"github.com/ethersphere/bee/v2/pkg/file/pipeline/builder"
+	"github.com/ethersphere/bee/v2/pkg/file/redundancy"
+	"github.com/ethersphere/bee/v2/pkg/manifest"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
-func (b *Bee) AddFeed(ctx context.Context, batchHex, owner, topic string) (reference swarm.Address, err error) {
+type pipelineFunc func(context.Context, io.Reader) (swarm.Address, error)
+
+func requestPipelineFn(s storage.Putter, encrypt bool, rLevel redundancy.Level) pipelineFunc {
+	return func(ctx context.Context, r io.Reader) (swarm.Address, error) {
+		pipe := builder.NewPipelineBuilder(ctx, s, encrypt, rLevel)
+		return builder.FeedPipeline(ctx, pipe, r)
+	}
+}
+
+func requestPipelineFactory(ctx context.Context, s storage.Putter, encrypt bool, rLevel redundancy.Level) func() pipeline.Interface {
+	return func() pipeline.Interface {
+		return builder.NewPipelineBuilder(ctx, s, encrypt, rLevel)
+	}
+}
+
+func (bl *Beelite) AddFeed(ctx context.Context, batchHex, owner, topic string, encrypt bool, rLevel redundancy.Level) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	ownerB, err := hex.DecodeString(owner)
 	if err != nil {
-		b.logger.Debugf("feed put: decode owner: %v", err)
+		bl.logger.Debug("feed put: decode owner: %v", err)
 		return
 	}
 	topicB, err := hex.DecodeString(topic)
 	if err != nil {
-		b.logger.Debugf("feed put: decode topic: %v", err)
+		bl.logger.Debug("feed put: decode topic: %v", err)
 		return
 	}
 	if batchHex == "" {
@@ -34,21 +53,35 @@ func (b *Bee) AddFeed(ctx context.Context, batchHex, owner, topic string) (refer
 		err = fmt.Errorf("invalid postage batch")
 		return
 	}
-	i, err := b.post.GetStampIssuer(batch)
+	var (
+		tag      uint64
+		deferred = false
+		pin      = false
+	)
+
+	if deferred || pin {
+		tag, err = bl.getOrCreateSessionID(uint64(0))
+		if err != nil {
+			bl.logger.Error(err, "get or create tag failed")
+			return
+		}
+	}
+	putter, err := bl.newStamperPutter(ctx, putterOptions{
+		BatchID:  batch,
+		TagID:    tag,
+		Pin:      pin,
+		Deferred: deferred,
+	})
 	if err != nil {
-		err = fmt.Errorf("stamp issuer: %w", err)
+		bl.logger.Error(err, "get putter failed")
 		return
 	}
-	stamper := postage.NewStamper(i, b.signer)
-	putter := &stamperPutter{Storer: b.ns, stamper: stamper}
 
-	pipeFn := func() pipeline.Interface {
-		return builder.NewPipelineBuilder(ctx, putter, storage.ModePutUpload, false)
-	}
-	l := loadsave.New(putter, pipeFn)
-	feedManifest, err := manifest.NewDefaultManifest(l, false)
+	factory := requestPipelineFactory(ctx, putter, encrypt, rLevel)
+	l := loadsave.New(bl.storer.ChunkStore(), bl.storer.Cache(), factory)
+	feedManifest, err := manifest.NewDefaultManifest(l, encrypt)
 	if err != nil {
-		b.logger.Debugf("feed put: new manifest: %v", err)
+		bl.logger.Debug("feed put: create manifest failed: %v", err)
 		return
 	}
 
@@ -59,17 +92,24 @@ func (b *Bee) AddFeed(ctx context.Context, batchHex, owner, topic string) (refer
 	}
 
 	emptyAddr := make([]byte, 32)
-
 	// a feed manifest stores the metadata at the root "/" path
 	err = feedManifest.Add(ctx, "/", manifest.NewEntry(swarm.NewAddress(emptyAddr), meta))
 	if err != nil {
-		b.logger.Debugf("feed post: add manifest entry: %v", err)
+		bl.logger.Debug("feed post: add manifest entry failed: %v", err)
 		return
 	}
 	reference, err = feedManifest.Store(ctx)
 	if err != nil {
-		b.logger.Debugf("feed post: store manifest: %v", err)
+		bl.logger.Debug("feed post: store manifest failed: %v", err)
 		return
 	}
+
+	err = putter.Done(reference)
+	if err != nil {
+		bl.logger.Error(err, "done split failed")
+		err = errors.Join(fmt.Errorf("done split failed: %w", err), putter.Cleanup())
+		return
+	}
+
 	return
 }

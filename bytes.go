@@ -1,20 +1,20 @@
-package bee
+package beelite
 
 import (
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ethersphere/bee/pkg/file/joiner"
-	"github.com/ethersphere/bee/pkg/file/pipeline/builder"
-	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/sctx"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
 	"io"
+
+	"github.com/ethersphere/bee/v2/pkg/file/joiner"
+	"github.com/ethersphere/bee/v2/pkg/file/redundancy"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
-func (b *Bee) AddBytes(parentContext context.Context, batchHex string, reader io.Reader) (reference swarm.Address, err error) {
+func (bl *Beelite) AddBytes(parentContext context.Context, batchHex string, encrypt bool, rLevel redundancy.Level, reader io.Reader) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	if batchHex == "" {
 		err = fmt.Errorf("batch is not set")
 		return
@@ -24,35 +24,55 @@ func (b *Bee) AddBytes(parentContext context.Context, batchHex string, reader io
 		err = fmt.Errorf("invalid postage batch")
 		return
 	}
-	i, err := b.post.GetStampIssuer(batch)
+
+	var (
+		tag      uint64
+		deferred = false
+		pin      = false
+	)
+
+	if deferred || pin {
+		tag, err = bl.getOrCreateSessionID(uint64(0))
+		if err != nil {
+			bl.logger.Error(err, "get or create tag failed")
+			return
+		}
+	}
+	putter, err := bl.newStamperPutter(parentContext, putterOptions{
+		BatchID:  batch,
+		TagID:    tag,
+		Pin:      pin,
+		Deferred: deferred,
+	})
 	if err != nil {
-		err = fmt.Errorf("stamp issuer: %w", err)
+		bl.logger.Error(err, "get putter failed")
 		return
 	}
-	tag, err := b.tagService.Create(0)
+
+	p := requestPipelineFn(putter, encrypt, rLevel)
+	reference, err = p(parentContext, reader)
 	if err != nil {
-		err = fmt.Errorf("tagService create: %w", err)
+		err = fmt.Errorf("(split write all) upload failed 1: %w", err)
 		return
 	}
-	stamper := postage.NewStamper(i, b.signer)
-	putter := &stamperPutter{Storer: b.ns, stamper: stamper}
-	ctx := sctx.SetTag(parentContext, tag)
-	pipe := builder.NewPipelineBuilder(ctx, putter, storage.ModePutUpload, false)
-	reference, err = builder.FeedPipeline(ctx, pipe, reader)
+
+	err = putter.Done(reference)
 	if err != nil {
-		err = fmt.Errorf("upload failed: %w", err)
+		bl.logger.Error(err, "done split failed")
+		err = errors.Join(fmt.Errorf("(done split) upload failed 2: %w", err), putter.Cleanup())
 		return
 	}
 	return
 }
 
-func (b *Bee) GetBytes(parentContext context.Context, reference swarm.Address) (io.Reader, error) {
-	reader, _, err := joiner.New(parentContext, b.ns, reference)
+func (bl *Beelite) GetBytes(parentContext context.Context, reference swarm.Address) (io.Reader, error) {
+	cache := true
+	reader, _, err := joiner.New(parentContext, bl.storer.Download(cache), bl.storer.Cache(), reference)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			return nil, fmt.Errorf("api download: not found : %s", err.Error())
+			return nil, fmt.Errorf("api download: not found : %w", err)
 		}
-		return nil, fmt.Errorf("unexpected error: %s: %v", reference, err)
+		return nil, fmt.Errorf("unexpected error: %v: %v", reference, err)
 	}
 	return reader, nil
 }

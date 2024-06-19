@@ -1,21 +1,25 @@
-package bee
+package beelite
 
 import (
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ethersphere/bee/pkg/postage"
-	"github.com/ethersphere/bee/pkg/storage"
-	"github.com/ethersphere/bee/pkg/swarm"
+	"io"
+
+	"github.com/ethersphere/bee/v2/pkg/cac"
+	"github.com/ethersphere/bee/v2/pkg/storage"
+	"github.com/ethersphere/bee/v2/pkg/swarm"
 )
 
-func (b *Bee) GetChunk(parentContext context.Context, reference swarm.Address) (swarm.Chunk, error) {
-	chunk, err := b.ns.Get(parentContext, storage.ModeGetRequest, reference)
+func (bl *Beelite) GetChunk(parentContext context.Context, reference swarm.Address) (swarm.Chunk, error) {
+	cache := true
+	chunk, err := bl.storer.Download(cache).Get(parentContext, reference)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			b.logger.Tracef("chunk: chunk not found. addr %s", reference)
-			return nil, fmt.Errorf("chunk: chunk not found. addr %s", reference)
+			msg := fmt.Sprintf("chunk: chunk not found. addr %s", reference)
+			bl.logger.Debug(msg)
+			return nil, fmt.Errorf(msg)
 
 		}
 		return nil, fmt.Errorf("chunk: chunk read error: %v ,addr %s", err, reference)
@@ -23,22 +27,68 @@ func (b *Bee) GetChunk(parentContext context.Context, reference swarm.Address) (
 	return chunk, nil
 }
 
-func (b *Bee) AddChunk(parentContext context.Context, batchHex string, chunk swarm.Chunk) (swarm.Address, error) {
+func (bl *Beelite) AddChunk(parentContext context.Context, batchHex string, reader io.Reader, swarmTag uint64) (reference swarm.Address, err error) {
+	reference = swarm.ZeroAddress
 	batch, err := hex.DecodeString(batchHex)
 	if err != nil {
 		err = fmt.Errorf("invalid postage batch")
-		return swarm.ZeroAddress, err
+		return
 	}
-	i, err := b.post.GetStampIssuer(batch)
+
+	var (
+		tag uint64
+	)
+
+	if swarmTag > 0 {
+		tag, err = bl.getOrCreateSessionID(swarmTag)
+		if err != nil {
+			bl.logger.Error(err, "get or create tag failed")
+			return
+		}
+	}
+	deferred := tag != 0
+	putter, err := bl.newStamperPutter(parentContext, putterOptions{
+		BatchID:  batch,
+		TagID:    tag,
+		Deferred: deferred,
+	})
 	if err != nil {
-		err = fmt.Errorf("stamp issuer: %w", err)
-		return swarm.ZeroAddress, err
+		bl.logger.Error(err, "get putter failed")
+		return
 	}
-	stamper := postage.NewStamper(i, b.signer)
-	putter := &stamperPutter{Storer: b.ns, stamper: stamper}
-	_, err = putter.Put(parentContext, storage.ModePutUpload, chunk)
+
+	data, err := io.ReadAll(reader)
 	if err != nil {
-		return swarm.ZeroAddress, err
+		bl.logger.Error(err, "chunk upload: read chunk data failed")
+		return
+
 	}
-	return chunk.Address(), nil
+
+	if len(data) < swarm.SpanSize {
+		err = errors.New("insufficient data length")
+		bl.logger.Error(err, "chunk upload: insufficient data length")
+		return
+	}
+
+	chunk, err := cac.NewWithDataSpan(data)
+	if err != nil {
+		bl.logger.Error(err, "chunk upload: create chunk error")
+		return
+	}
+
+	err = putter.Put(parentContext, chunk)
+	if err != nil {
+		bl.logger.Error(err, "chunk upload: write chunk failed", "chunk_address", chunk.Address())
+		return
+	}
+
+	err = putter.Done(chunk.Address())
+	if err != nil {
+		bl.logger.Error(err, "done split failed")
+		err = errors.Join(fmt.Errorf("done split failed: %w", err), putter.Cleanup())
+		return
+	}
+
+	reference = chunk.Address()
+	return
 }
